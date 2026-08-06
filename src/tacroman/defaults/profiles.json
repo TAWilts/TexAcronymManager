@@ -1,0 +1,67 @@
+[
+  {
+    "id": "acronym-package",
+    "name": "acronym package (input file)",
+    "description": "Produces an acronym environment with \\acro{SHORT}{long form}.",
+    "preamble_hint": "In the preamble: \\usepackage[printonlyused]{acronym}",
+    "header": "\\begin{acronym}\n",
+    "entry": "\\acro{[[short]]}{[[long]]}",
+    "footer": "\n\\end{acronym}\n",
+    "separator": "\n",
+    "sort_by": "short",
+    "escape_mode": "none",
+    "usage_template": "\\ac{[[short]]}"
+  },
+  {
+    "id": "acronym-complete-snippet",
+    "name": "acronym package (complete block)",
+    "description": "Produces the complete snippet, including the package line and acronym environment.",
+    "preamble_hint": "Already includes \\usepackage[printonlyused]{acronym}. Use for direct insertion, not as an \\input file in the document body.",
+    "header": "\\usepackage[printonlyused]{acronym}\n\n\\begin{acronym}\n",
+    "entry": "\\acro{[[short]]}{[[long]]}",
+    "footer": "\n\\end{acronym}\n",
+    "separator": "\n",
+    "sort_by": "short",
+    "escape_mode": "none",
+    "usage_template": "\\ac{[[short]]}"
+  },
+  {
+    "id": "acro-package",
+    "name": "acro package",
+    "description": "Produces individual \\DeclareAcronym definitions for the acro package.",
+    "preamble_hint": "In the preamble: \\usepackage{acro}",
+    "header": "",
+    "entry": "\\DeclareAcronym{[[id]]}{\n  short = [[short]],\n  long = [[long]]\n}",
+    "footer": "\n",
+    "separator": "\n\n",
+    "sort_by": "short",
+    "escape_mode": "none",
+    "usage_template": "\\ac{[[id]]}"
+  },
+  {
+    "id": "glossaries-extra",
+    "name": "glossaries-extra",
+    "description": "Produces \\newacronym{key}{SHORT}{long form}.",
+    "preamble_hint": "In the preamble: \\usepackage[acronym]{glossaries-extra}",
+    "header": "",
+    "entry": "\\newacronym{[[id]]}{[[short]]}{[[long]]}",
+    "footer": "\n",
+    "separator": "\n",
+    "sort_by": "short",
+    "escape_mode": "none",
+    "usage_template": "\\gls{[[id]]}"
+  },
+  {
+    "id": "csv",
+    "name": "CSV export",
+    "description": "A portable export for spreadsheets and other programs.",
+    "preamble_hint": "No LaTeX preamble is required.",
+    "header": "short,long,category,note\n",
+    "entry": "[[short]],[[long]],[[category]],[[note]]",
+    "footer": "\n",
+    "separator": "\n",
+    "sort_by": "short",
+    "escape_mode": "csv",
+    "usage_template": ""
+  }
+]

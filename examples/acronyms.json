@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "acronyms": [
+    {
+      "short": "ADC",
+      "long": "analog to digital converter",
+      "category": "",
+      "note": "",
+      "uid": "a2b96942-9555-4c5d-85df-e74e0d9e4056"
+    },
+    {
+      "short": "AGC",
+      "long": "automatic gain control",
+      "category": "",
+      "note": "",
+      "uid": "a5949acd-a9f3-4c34-bdfd-f2db286a7fd5"
+    },
+    {
+      "short": "AHRS",
+      "long": "attitude heading reference system",
+      "category": "",
+      "note": "",
+      "uid": "08910073-d701-4c31-9240-2ad45531d2ec"
+    },
+    {
+      "short": "AI",
+      "long": "artificial intelligence",
+      "category": "",
+      "note": "",
+      "uid": "d63fa7eb-e4ac-43c0-ae50-1e396a53fb16"
+    },
+    {
+      "short": "ANN",
+      "long": "artificial neural network",
+      "category": "",
+      "note": "",
+      "uid": "11f7f224-ed5e-468d-9069-21c54c16a15a"
+    },
+    {
+      "short": "AOA",
+      "long": "angle of arrival",
+      "category": "",
+      "note": "",
+      "uid": "418814df-7b52-4519-9988-3f9e943857cb"
+    }
+  ]
+}

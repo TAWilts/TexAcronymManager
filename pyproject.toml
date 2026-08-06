@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tacroman"
+version = "0.2.0"
+description = "A dependency-free desktop manager for LaTeX acronym definitions"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+readme = "README.md"
+authors = [{name = "Thomas Wilts"}]
+
+[project.urls]
+Homepage = "https://github.com/TAWilts/TexAcronymManager"
+Repository = "https://github.com/TAWilts/TexAcronymManager"
+Issues = "https://github.com/TAWilts/TexAcronymManager/issues"
+
+[project.scripts]
+tacroman = "tacroman.app:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+tacroman = ["defaults/*.json"]

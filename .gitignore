@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Per-user working files; store your project data beside the Overleaf project instead.
+acronym-manager-settings.json
+acronym-render-profiles.json
