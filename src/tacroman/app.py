@@ -51,6 +51,8 @@ class TAcroManApp(tk.Tk):
         self.profiles: list[dict[str, str]] = []
         self.editing_uid: str | None = None
         self._ui_ready = False
+        self._language_refresh_after_id: str | None = None
+        self._rendered_language = ""
 
         self.database_path_var = tk.StringVar(value=str(self.database_path))
         self.output_path_var = tk.StringVar(value=str(self.output_path))
@@ -71,7 +73,6 @@ class TAcroManApp(tk.Tk):
         self.search_var.trace_add("write", lambda *_: self._refresh_table())
         for variable in (self.short_var, self.long_var, self.category_var):
             variable.trace_add("write", lambda *_: self._update_validation())
-        self.language_var.trace_add("write", lambda *_: self._on_language_changed())
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
     @property
@@ -115,6 +116,7 @@ class TAcroManApp(tk.Tk):
             self._update_profile_combo()
         self._refresh_table()
         self._update_validation()
+        self._rendered_language = self.language
 
     def _build_menu(self) -> None:
         menu = tk.Menu(self)
@@ -135,8 +137,18 @@ class TAcroManApp(tk.Tk):
         menu.add_cascade(label=self.t("menu_profiles"), menu=profile_menu)
 
         language_menu = tk.Menu(menu, tearoff=False)
-        language_menu.add_radiobutton(label="Deutsch", value="de", variable=self.language_var)
-        language_menu.add_radiobutton(label="English", value="en", variable=self.language_var)
+        language_menu.add_radiobutton(
+            label="Deutsch",
+            value="de",
+            variable=self.language_var,
+            command=self._request_language_refresh,
+        )
+        language_menu.add_radiobutton(
+            label="English",
+            value="en",
+            variable=self.language_var,
+            command=self._request_language_refresh,
+        )
         menu.add_cascade(label=self.t("menu_language"), menu=language_menu)
 
         help_menu = tk.Menu(menu, tearoff=False)
@@ -600,8 +612,24 @@ class TAcroManApp(tk.Tk):
         self._save_workspace_settings()
         self.output_status_var.set(self._active_profile().get("preamble_hint", ""))
 
-    def _on_language_changed(self) -> None:
-        if not self._ui_ready:
+    def _request_language_refresh(self) -> None:
+        """Queue a UI rebuild after the active menu command has finished.
+
+        Replacing the menu while its language radio button is still handling a
+        click can make Tkinter reference the old, already-destroyed menu on a
+        subsequent language change.  Deferring the rebuild until idle keeps
+        the menu callback short and makes repeated language switches safe.
+        """
+        if not self._ui_ready or self.language == self._rendered_language:
+            return
+        if self._language_refresh_after_id is not None:
+            return
+        self._language_refresh_after_id = self.after_idle(self._apply_language_refresh)
+
+    def _apply_language_refresh(self) -> None:
+        """Rebuild the interface once the language menu is no longer active."""
+        self._language_refresh_after_id = None
+        if not self._ui_ready or self.language == self._rendered_language:
             return
         self._build_ui()
         try:
