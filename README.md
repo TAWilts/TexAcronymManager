@@ -26,6 +26,13 @@ beside the selected database.
 - Configurable output profiles for `acronym`, `acro`, `glossaries-extra`, CSV,
   and custom formats.
 
+## Development transparency
+
+TAcroMan was developed in an iterative collaboration with **ChatGPT 5.6 Terra
+Max** by OpenAI. ChatGPT substantially drafted the application code, tests, and
+documentation. The repository owner directs the project and remains responsible
+for reviewing, maintaining, and releasing the software.
+
 ## Use with the `acronym` package
 
 TAcroMan's default profile produces this file:
