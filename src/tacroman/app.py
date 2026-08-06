@@ -98,14 +98,8 @@ class TAcroManApp(tk.Tk):
         return load_settings(legacy_path) if legacy_path.exists() else {}
 
     def _build_ui(self) -> None:
-        """Build the menus and tabs, preserving unfinished editor input."""
+        """Build the menu and editor, preserving unfinished editor input."""
         note_content = self.note_text.get("1.0", "end-1c") if hasattr(self, "note_text") else ""
-        selected_tab = 0
-        if hasattr(self, "tabs"):
-            try:
-                selected_tab = self.tabs.index(self.tabs.select())
-            except tk.TclError:
-                selected_tab = 0
         if hasattr(self, "content"):
             self.content.destroy()
 
@@ -113,15 +107,7 @@ class TAcroManApp(tk.Tk):
         self._build_menu()
         self.content = ttk.Frame(self)
         self.content.pack(fill="both", expand=True)
-        self.tabs = ttk.Notebook(self.content)
-        self.tabs.pack(fill="both", expand=True, padx=10, pady=(8, 10))
-
-        acronym_tab = ttk.Frame(self.tabs)
-        language_tab = ttk.Frame(self.tabs)
-        self.tabs.add(acronym_tab, text=self.t("tab_acronyms"))
-        self.tabs.add(language_tab, text=self.t("tab_language"))
-        self._build_acronym_tab(acronym_tab)
-        self._build_language_tab(language_tab)
+        self._build_acronym_tab(self.content)
 
         if note_content:
             self.note_text.insert("1.0", note_content)
@@ -129,7 +115,6 @@ class TAcroManApp(tk.Tk):
             self._update_profile_combo()
         self._refresh_table()
         self._update_validation()
-        self.tabs.select(min(selected_tab, 1))
 
     def _build_menu(self) -> None:
         menu = tk.Menu(self)
@@ -148,6 +133,11 @@ class TAcroManApp(tk.Tk):
         profile_menu.add_command(label=self.t("menu_edit_profile"), command=self._open_profile_editor)
         profile_menu.add_command(label=self.t("menu_select_profile_file"), command=self._choose_profiles_file)
         menu.add_cascade(label=self.t("menu_profiles"), menu=profile_menu)
+
+        language_menu = tk.Menu(menu, tearoff=False)
+        language_menu.add_radiobutton(label="Deutsch", value="de", variable=self.language_var)
+        language_menu.add_radiobutton(label="English", value="en", variable=self.language_var)
+        menu.add_cascade(label=self.t("menu_language"), menu=language_menu)
 
         help_menu = tk.Menu(menu, tearoff=False)
         help_menu.add_command(label=self.t("menu_help"), command=self._show_help)
@@ -193,16 +183,6 @@ class TAcroManApp(tk.Tk):
         body.add(editor_frame, weight=2)
         self._build_list(list_frame)
         self._build_editor(editor_frame)
-
-    def _build_language_tab(self, parent: ttk.Frame) -> None:
-        content = ttk.Frame(parent, padding=24)
-        content.pack(fill="both", expand=True, anchor="nw")
-        ttk.Label(content, text=self.t("language_heading"), font=("TkDefaultFont", 13, "bold")).pack(anchor="w")
-        ttk.Label(content, text=self.t("language_description"), wraplength=680).pack(anchor="w", pady=(7, 20))
-        options = ttk.LabelFrame(content, text=self.t("tab_language"), padding=14)
-        options.pack(anchor="w", fill="x")
-        ttk.Radiobutton(options, text="Deutsch", value="de", variable=self.language_var).pack(anchor="w")
-        ttk.Radiobutton(options, text="English", value="en", variable=self.language_var).pack(anchor="w", pady=(8, 0))
 
     def _build_list(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)

@@ -3,4 +3,4 @@
 from .model import Acronym
 
 __all__ = ["Acronym"]
-__version__ = "0.2.0"
+__version__ = "0.2.1"

@@ -84,6 +84,10 @@ class TAcroManTests(unittest.TestCase):
         self.assertIn(r"\acro{…}{…}", no_definitions)
         self.assertIn(r"\acro{[[short]]}{[[long]]}", help_text)
 
+    def test_language_menu_is_translated(self) -> None:
+        self.assertEqual(translate("de", "menu_language"), "Sprache")
+        self.assertEqual(translate("en", "menu_language"), "Language")
+
     def test_database_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "acronyms.json"

@@ -7,8 +7,8 @@ file. The project is available at
 [TAWilts/TexAcronymManager](https://github.com/TAWilts/TexAcronymManager).
 
 The graphical interface is available in German and English. Use the
-**Language** tab at the top of the window to switch at any time; the choice is
-stored beside the selected database.
+**Language** menu in the menu bar to switch at any time; the choice is stored
+beside the selected database.
 
 ## Features
 
