@@ -5,6 +5,9 @@ profile-defined LaTeX command entries. It started as a TeX acronym manager; the
 name remains, but version 0.3 no longer hard-codes an acronym package or any
 relationship between commands.
 
+<img width="1080" height="716" alt="grafik" src="https://github.com/user-attachments/assets/6adc0f6a-4742-4ff3-95f9-f3ec9c40c6ff" />
+
+
 The JSON database is the source of truth. A selected JSON profile defines
 independent command types, their fields, comparison rules, and the generated
 TeX output. The project is available at
