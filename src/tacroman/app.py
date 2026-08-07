@@ -31,10 +31,72 @@ APP_NAME = "TAcroMan"
 SETTINGS_FILENAME = "tacroman-settings.json"
 LEGACY_SETTINGS_FILENAME = "acronym-manager-settings.json"
 PROFILE_FILENAME = "tacroman-render-profiles.json"
+APP_STATE_FILENAME = "tacroman-app-state.json"
+LAST_DATABASE_PATH_KEY = "last_database_path"
+LEGACY_DIRECTORY_SETTINGS_FILENAME = ".acronym_manager_settings.json"
 
 
 def _default_database_path() -> Path:
     return Path.home() / APP_NAME / "entries.json"
+
+
+def _app_state_path() -> Path:
+    """Return the app-wide state file, independent of any workspace."""
+    return Path.home() / APP_NAME / APP_STATE_FILENAME
+
+
+def _stored_database_path(state_path: Path | None = None) -> Path | None:
+    """Return the last usable database saved by the current app version."""
+    value = load_settings(state_path or _app_state_path()).get(LAST_DATABASE_PATH_KEY)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        candidate = Path(value).expanduser().resolve()
+        return candidate if candidate.is_file() else None
+    except OSError:
+        return None
+
+
+def _legacy_database_path(settings_path: Path | None = None) -> Path | None:
+    """Migrate the folder remembered by the pre-TAcroMan application."""
+    value = load_settings(settings_path or (Path.home() / LEGACY_DIRECTORY_SETTINGS_FILENAME)).get("last_directory")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        directory = Path(value).expanduser().resolve()
+        for filename in ("entries.json", "acronyms.json"):
+            candidate = directory / filename
+            if candidate.is_file():
+                return candidate
+    except OSError:
+        pass
+    return None
+
+
+def _startup_database_path(
+    database_path: Path | None,
+    *,
+    state_path: Path | None = None,
+    legacy_settings_path: Path | None = None,
+) -> Path:
+    """Prefer an explicit CLI path, then the last database, then the default."""
+    if database_path is not None:
+        return database_path
+    return _stored_database_path(state_path) or _legacy_database_path(legacy_settings_path) or _default_database_path()
+
+
+def _remember_database_path(database_path: Path, *, state_path: Path | None = None) -> None:
+    """Store the last opened database without risking the user's main workflow."""
+    try:
+        database_path = database_path.expanduser().resolve()
+        if not database_path.is_file():
+            return
+        settings = load_settings(state_path or _app_state_path())
+        settings[LAST_DATABASE_PATH_KEY] = str(database_path)
+        save_settings(state_path or _app_state_path(), settings)
+    except OSError:
+        # Reopening the last database is a convenience, never a reason to fail a save.
+        pass
 
 
 @dataclass
@@ -112,6 +174,7 @@ class TAcroManApp(tk.Tk):
         self.search_var.trace_add("write", lambda *_: self._refresh_table())
         self._build_ui()
         self._load_workspace(initial=True)
+        _remember_database_path(self.database_path)
         self._ui_ready = True
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
@@ -589,6 +652,7 @@ class TAcroManApp(tk.Tk):
             self.database_path = Path(self.database_path_var.get()).expanduser().resolve()
             self.output_path = Path(self.output_path_var.get()).expanduser().resolve()
             save_database(self.database_path, self.entries)
+            _remember_database_path(self.database_path)
             self._save_workspace_settings()
             return self._write_output(show_success=False)
         except OSError as error:
@@ -645,6 +709,7 @@ class TAcroManApp(tk.Tk):
         self.entries = []
         self.profiles = []
         self._load_workspace()
+        _remember_database_path(self.database_path)
         self._ui_ready = True
 
     def _new_database(self) -> None:
@@ -668,6 +733,7 @@ class TAcroManApp(tk.Tk):
         self._start_new_entry()
         try:
             save_database(self.database_path, self.entries)
+            _remember_database_path(self.database_path)
             self._write_output(show_success=False)
             self.output_status_var.set(self.t("new_database_status", path=self.database_path))
         except OSError as error:
@@ -997,5 +1063,5 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    app = TAcroManApp(args.database or _default_database_path(), args.output, args.profiles)
+    app = TAcroManApp(_startup_database_path(args.database), args.output, args.profiles)
     app.mainloop()

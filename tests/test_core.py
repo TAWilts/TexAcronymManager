@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from tacroman.app import TAcroManApp
+from tacroman.app import TAcroManApp, _remember_database_path, _startup_database_path
 from tacroman.i18n import normalize_language, translate
 from tacroman.importing import parse_acronym_package, read_tex_file
 from tacroman.model import CommandEntry, command_map, comparison_matches, similarity_matches, validate_entry
@@ -245,6 +245,17 @@ class TAcroManTests(unittest.TestCase):
             loaded = load_database(path)
             self.assertEqual(loaded[0].command_id, "macro")
             self.assertEqual(loaded[0].value("body"), "vehicle")
+
+    def test_startup_reopens_the_last_database(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            database = directory / "entries.json"
+            state = directory / "app-state.json"
+            save_database(database, [CommandEntry("macro", {"name": "AUV", "body": "vehicle"})])
+
+            _remember_database_path(database, state_path=state)
+
+            self.assertEqual(_startup_database_path(None, state_path=state), database.resolve())
 
     def test_legacy_profile_loads_as_one_generic_command(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
