@@ -1,4 +1,4 @@
-"""Atomic JSON persistence for the acronym database and app settings."""
+"""Atomic JSON persistence for generic command databases and settings."""
 
 from __future__ import annotations
 
@@ -9,9 +9,10 @@ import tempfile
 from typing import Any
 
 from .i18n import translate
-from .model import Acronym
+from .model import Acronym, CommandEntry, acronym_to_entry
 
-SCHEMA_VERSION = 1
+
+SCHEMA_VERSION = 2
 
 
 def atomic_write_text(path: Path, content: str) -> None:
@@ -29,8 +30,8 @@ def _atomic_json_write(path: Path, payload: dict[str, Any] | list[dict[str, Any]
     atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 
 
-def load_database(path: Path, *, language: str = "en") -> list[Acronym]:
-    """Load entries from ``path``; a non-existing database is simply empty."""
+def load_database(path: Path, *, language: str = "en") -> list[CommandEntry]:
+    """Load generic v2 databases and transparently migrate v1 acronym data."""
     if not path.exists():
         return []
     try:
@@ -38,22 +39,28 @@ def load_database(path: Path, *, language: str = "en") -> list[Acronym]:
     except json.JSONDecodeError as error:
         raise ValueError(translate(language, "database_invalid_json", error=error)) from error
 
-    if isinstance(raw, list):  # Graceful support for early/manual databases.
+    if isinstance(raw, dict) and isinstance(raw.get("entries"), list):
+        records = raw["entries"]
+        if not all(isinstance(record, dict) for record in records):
+            raise ValueError(translate(language, "database_invalid_entry"))
+        return [CommandEntry.from_dict(record) for record in records]
+
+    # The 0.1/0.2 formats were either a raw list or an object with ``acronyms``.
+    if isinstance(raw, list):
         records = raw
     elif isinstance(raw, dict) and isinstance(raw.get("acronyms"), list):
         records = raw["acronyms"]
     else:
         raise ValueError(translate(language, "database_invalid_shape"))
-
     if not all(isinstance(record, dict) for record in records):
         raise ValueError(translate(language, "database_invalid_entry"))
-    return [Acronym.from_dict(record) for record in records]
+    return [acronym_to_entry(Acronym.from_dict(record)) for record in records]
 
 
-def save_database(path: Path, entries: list[Acronym]) -> None:
-    payload = {
+def save_database(path: Path, entries: list[CommandEntry]) -> None:
+    payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
-        "acronyms": [entry.to_dict() for entry in entries],
+        "entries": [entry.to_dict() for entry in entries],
     }
     _atomic_json_write(path, payload)
 

@@ -1,4 +1,4 @@
-"""Small, dependency-free user-interface translation helpers."""
+"""Small dependency-free translation helpers for the Tkinter interface."""
 
 from __future__ import annotations
 
@@ -11,15 +11,11 @@ SUPPORTED_LANGUAGES: tuple[str, ...] = ("de", "en")
 
 
 def normalize_language(value: str | None) -> str:
-    """Return a supported language code, falling back to German."""
     return value if value in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
 
 
 _MESSAGES: dict[str, Mapping[str, str]] = {
-    "app_title": {
-        "de": "TAcroMan – TeX Acronym Manager",
-        "en": "TAcroMan – TeX Acronym Manager",
-    },
+    "app_title": {"de": "TAcroMan – TeX Command Manager", "en": "TAcroMan – TeX Command Manager"},
     "language_changed": {"de": "Sprache wurde auf Deutsch umgestellt.", "en": "Language changed to English."},
     "menu_file": {"de": "Datei", "en": "File"},
     "menu_open_database": {"de": "Datenbank öffnen…", "en": "Open database…"},
@@ -27,8 +23,8 @@ _MESSAGES: dict[str, Mapping[str, str]] = {
     "menu_import_tex": {"de": "TeX-Datei importieren…", "en": "Import TeX file…"},
     "menu_write_output": {"de": "Ausgabedatei schreiben", "en": "Write output file"},
     "menu_exit": {"de": "Beenden", "en": "Exit"},
-    "menu_profiles": {"de": "Ausgabeprofile", "en": "Output profiles"},
-    "menu_edit_profile": {"de": "Aktives Format bearbeiten…", "en": "Edit active format…"},
+    "menu_profiles": {"de": "Profile", "en": "Profiles"},
+    "menu_edit_profile": {"de": "Aktives Profil bearbeiten…", "en": "Edit active profile…"},
     "menu_select_profile_file": {"de": "Profildatei auswählen…", "en": "Choose profile file…"},
     "menu_language": {"de": "Sprache", "en": "Language"},
     "menu_help": {"de": "Hilfe", "en": "Help"},
@@ -39,61 +35,76 @@ _MESSAGES: dict[str, Mapping[str, str]] = {
     "output_label": {"de": "Generierte Datei:", "en": "Generated file:"},
     "target": {"de": "Ziel…", "en": "Target…"},
     "write_now": {"de": "Jetzt schreiben", "en": "Write now"},
-    "output_format": {"de": "Ausgabeformat:", "en": "Output format:"},
-    "edit_format": {"de": "Format bearbeiten…", "en": "Edit format…"},
-    "edit_acronym": {"de": "Akronym bearbeiten", "en": "Edit acronym"},
+    "output_format": {"de": "Ausgabeprofil:", "en": "Output profile:"},
+    "edit_format": {"de": "Profil bearbeiten…", "en": "Edit profile…"},
+    "edit_entry": {"de": "Eintrag bearbeiten", "en": "Edit entry"},
+    "no_profile_commands": {
+        "de": "Das aktive Profil enthält keine Befehlstypen.",
+        "en": "The active profile does not define any command types.",
+    },
     "search": {"de": "Suchen:", "en": "Search:"},
-    "short": {"de": "Kürzel", "en": "Short form"},
-    "long": {"de": "Langform", "en": "Long form"},
-    "category": {"de": "Kategorie", "en": "Category"},
+    "command": {"de": "Befehl", "en": "Command"},
+    "key": {"de": "Schlüssel", "en": "Key"},
+    "details": {"de": "Details", "en": "Details"},
     "new_entry": {"de": "Neu", "en": "New"},
     "delete": {"de": "Löschen", "en": "Delete"},
     "preview": {"de": "Vorschau", "en": "Preview"},
     "select_to_edit": {"de": "Auswahl zum Bearbeiten", "en": "Select an entry to edit"},
-    "short_required": {"de": "Kürzel *", "en": "Short form *"},
-    "long_required": {"de": "Langform *", "en": "Long form *"},
-    "category_optional": {"de": "Kategorie (optional)", "en": "Category (optional)"},
-    "note_optional": {
-        "de": "Notiz (optional, wird nur von passenden Profilen ausgegeben)",
-        "en": "Note (optional; rendered only by profiles that use it)",
-    },
-    "add_acronym": {"de": "Akronym hinzufügen", "en": "Add acronym"},
+    "field_short": {"de": "Kürzel", "en": "Short form"},
+    "field_long": {"de": "Langform", "en": "Long form"},
+    "field_key": {"de": "Schlüssel", "en": "Key"},
+    "field_category": {"de": "Kategorie", "en": "Category"},
+    "field_note": {"de": "Notiz", "en": "Note"},
+    "field_short_plural": {"de": "Kürzel im Plural", "en": "Short plural"},
+    "field_long_plural": {"de": "Langform im Plural", "en": "Long plural"},
+    "add_entry": {"de": "Eintrag hinzufügen", "en": "Add entry"},
     "save_changes": {"de": "Änderungen speichern", "en": "Save changes"},
     "clear": {"de": "Leeren", "en": "Clear"},
     "copy_usage": {"de": "LaTeX-Aufruf kopieren", "en": "Copy LaTeX command"},
-    "ready": {"de": "Bereit für ein neues Akronym.", "en": "Ready for a new acronym."},
+    "ready": {"de": "Bereit für einen neuen Eintrag.", "en": "Ready for a new entry."},
     "format_valid": {"de": "Formatprüfung: in Ordnung.", "en": "Format check: looks good."},
     "entries_loaded": {"de": "{count} Einträge geladen.", "en": "Loaded {count} entries."},
-    "duplicate_live": {"de": "Existiert bereits: {entries}", "en": "Already exists: {entries}"},
-    "similar_live": {"de": "Ähnliche Einträge: {entries}", "en": "Similar entries: {entries}"},
-    "duplicate_error": {
-        "de": "Dieses Kürzel oder diese Langform existiert bereits:\n\n{entries}",
-        "en": "This short form or long form already exists:\n\n{entries}",
+    "entry_added": {"de": "Eintrag hinzugefügt. Du kannst direkt den nächsten eingeben.", "en": "Entry added. You can enter the next one right away."},
+    "entry_updated": {"de": "Eintrag aktualisiert. Du kannst direkt den nächsten eingeben.", "en": "Entry updated. You can enter the next one right away."},
+    "duplicate_same_command_live": {
+        "de": "Im selben Befehlstyp vorhanden: {entries}",
+        "en": "Already present in this command type: {entries}",
     },
-    "similar_confirm": {
-        "de": "Möglicherweise ähnliche Einträge gefunden:\n\n{entries}\n\nTrotzdem speichern?",
-        "en": "Potentially similar entries were found:\n\n{entries}\n\nSave anyway?",
+    "duplicate_other_command_live": {
+        "de": "In anderem Befehlstyp vorhanden (Warnung): {entries}",
+        "en": "Present in another command type (warning): {entries}",
     },
+    "duplicate_same_command_error": {
+        "de": "Dieser Vergleichsschlüssel existiert bereits im selben Befehlstyp:\n\n{entries}",
+        "en": "This comparison key already exists in the same command type:\n\n{entries}",
+    },
+    "similar_live": {"de": "Ähnliche Inhalte: {entries}", "en": "Similar content: {entries}"},
     "format_confirm": {
         "de": "Format-Hinweis:\n\n{warnings}\n\nTrotzdem speichern?",
         "en": "Formatting note:\n\n{warnings}\n\nSave anyway?",
     },
-    "entry_added": {"de": "Akronym hinzugefügt. Du kannst direkt das nächste eingeben.", "en": "Acronym added. You can enter the next one right away."},
-    "entry_updated": {"de": "Akronym aktualisiert. Du kannst direkt das nächste eingeben.", "en": "Acronym updated. You can enter the next one right away."},
     "select_entry_first": {"de": "Bitte zuerst einen Eintrag auswählen.", "en": "Please select an entry first."},
-    "confirm_delete": {"de": "{short} wirklich löschen?", "en": "Delete {short}?"},
+    "confirm_delete": {"de": "{key} wirklich löschen?", "en": "Delete {key}?"},
     "file_write_failed": {"de": "Datei konnte nicht geschrieben werden:\n{error}", "en": "The file could not be written:\n{error}"},
     "profile_warning": {"de": "Profil prüfen:\n\n{warnings}", "en": "Check profile:\n\n{warnings}"},
     "output_written": {"de": "{count} Einträge geschrieben:\n{path}", "en": "Wrote {count} entries:\n{path}"},
     "output_status_written": {"de": "Geschrieben: {path}", "en": "Written: {path}"},
+    "output_status_written_with_omitted": {
+        "de": "Geschrieben: {path} ({count} Einträge gehören nicht zum aktiven Profil und wurden ausgelassen)",
+        "en": "Written: {path} ({count} entries do not belong to the active profile and were omitted)",
+    },
     "output_failed": {"de": "Schreiben fehlgeschlagen.", "en": "Writing failed."},
-    "open_database_title": {"de": "Akronymdatenbank öffnen", "en": "Open acronym database"},
-    "new_database_title": {"de": "Neue Akronymdatenbank anlegen", "en": "Create acronym database"},
+    "open_database_title": {"de": "Eintragsdatenbank öffnen", "en": "Open entry database"},
+    "new_database_title": {"de": "Neue Eintragsdatenbank anlegen", "en": "Create entry database"},
     "new_database_status": {"de": "Neue Datenbank angelegt: {path}", "en": "Created new database: {path}"},
     "database_create_failed": {"de": "Datenbank konnte nicht angelegt werden:\n{error}", "en": "The database could not be created:\n{error}"},
     "choose_output_title": {"de": "Generierte Ausgabe speichern als", "en": "Save generated output as"},
-    "choose_profiles_title": {"de": "Zusätzliche Ausgabeprofile laden", "en": "Load additional output profiles"},
+    "choose_profiles_title": {"de": "Zusätzliche Profile laden", "en": "Load additional profiles"},
     "import_tex_title": {"de": "TeX-Datei importieren", "en": "Import TeX file"},
+    "import_profile_unsupported": {
+        "de": "Der aktuelle TeX-Import kennt nur \\acro-Definitionen. Wähle ein Profil mit dem Befehlstyp 'acronym' oder importiere in eine neue Datenbank.",
+        "en": "The current TeX importer knows only \\acro definitions. Choose a profile with the 'acronym' command type or import into a new database.",
+    },
     "file_read_failed": {"de": "Datei konnte nicht gelesen werden:\n{error}", "en": "The file could not be read:\n{error}"},
     "no_definitions": {"de": "Keine \\acro{…}{…}-Definitionen gefunden.", "en": "No \\acro{…}{…} definitions were found."},
     "import_choice": {
@@ -101,44 +112,41 @@ _MESSAGES: dict[str, Mapping[str, str]] = {
         "en": "Found {count} definitions.\n\nYes: replace the current database\nNo: add only new short forms\nCancel: make no changes",
     },
     "imported": {"de": "{count} Definitionen importiert.", "en": "Imported {count} definitions."},
-    "no_acronym": {"de": "Bitte zuerst ein Akronym eingeben oder auswählen.", "en": "Please enter or select an acronym first."},
-    "no_usage": {"de": "Das aktive Profil hat keinen LaTeX-Aufruf definiert.", "en": "The active profile does not define a LaTeX command."},
+    "no_entry": {"de": "Bitte zuerst einen Eintrag eingeben oder auswählen.", "en": "Please enter or select an entry first."},
+    "no_usage": {"de": "Der aktive Befehl definiert keinen LaTeX-Aufruf.", "en": "The active command does not define a LaTeX usage command."},
     "copied_usage": {"de": "In die Zwischenablage kopiert: {command}", "en": "Copied to clipboard: {command}"},
     "preview_title": {"de": "Vorschau – {name}", "en": "Preview – {name}"},
     "help_text": {
-        "de": "Das Standardprofil erzeugt exakt eine acronym-Umgebung:\n"
-        "\\begin{acronym} … \\acro{ADC}{analog to digital converter} … \\end{acronym}\n\n"
-        "Über Ausgabeprofile kannst du weitere Formate bearbeiten oder kopieren.\n\n"
-        "Erlaubte Platzhalter in Vorlagen:\n"
-        "[[short]]  Kürzel\n[[long]]   Langform\n[[id]]     automatisch abgeleiteter Schlüssel\n"
-        "[[category]] und [[note]]\n\n"
-        "LaTeX-Klammern bleiben in den Vorlagen unverändert. Beispiel:\n"
-        "\\acro{[[short]]}{[[long]]}",
-        "en": "The default profile produces a standard acronym environment:\n"
-        "\\begin{acronym} … \\acro{ADC}{analog to digital converter} … \\end{acronym}\n\n"
-        "Use Output profiles to edit or copy other formats.\n\n"
-        "Allowed template placeholders:\n"
-        "[[short]]  short form\n[[long]]   long form\n[[id]]     generated identifier\n"
-        "[[category]] and [[note]]\n\n"
-        "LaTeX braces remain unchanged in templates. Example:\n"
-        "\\acro{[[short]]}{[[long]]}",
+        "de": "TAcroMan speichert unabhängige Befehlseinträge in JSON. Ein Ausgabeprofil definiert die Befehlstypen, ihre Felder, Vorlagen und Vergleichsgruppen.\n\n"
+        "Ein Feld mit comparison_group wird technisch auf gleiche Werte geprüft: gleicher Befehlstyp = Fehler, anderer Befehlstyp = Warnung. Es gibt keine fest eingebaute Parent-, Primary- oder Paketlogik.\n\n"
+        "Weitere Befehlstypen und Felder legst du in Profile → Aktives Profil bearbeiten… im Reiter Command schema an.",
+        "en": "TAcroMan stores independent command entries in JSON. An output profile defines command types, their fields, templates, and comparison groups.\n\n"
+        "A field with a comparison_group is checked mechanically for equal values: same command type = error, another command type = warning. There is no built-in parent, primary, or package logic.\n\n"
+        "Add command types and fields through Profiles → Edit active profile… on the Command schema tab.",
     },
     "about_text": {
-        "de": "TAcroMan verwaltet LaTeX-Akronyme aus einer JSON-Datenbank und erzeugt konfigurierbare Ausgabedateien.\n\nProjekt: https://github.com/TAWilts/TexAcronymManager",
-        "en": "TAcroMan manages LaTeX acronyms from a JSON database and writes configurable output files.\n\nProject: https://github.com/TAWilts/TexAcronymManager",
+        "de": "TAcroMan verwaltet profildefinierte LaTeX-Befehle aus einer JSON-Datenbank und erzeugt konfigurierbare Ausgabedateien.\n\nProjekt: https://github.com/TAWilts/TexAcronymManager",
+        "en": "TAcroMan manages profile-defined LaTeX commands from a JSON database and writes configurable output files.\n\nProject: https://github.com/TAWilts/TexAcronymManager",
     },
     "json_files": {"de": "JSON-Dateien", "en": "JSON files"},
     "tex_files": {"de": "TeX-Dateien", "en": "TeX files"},
     "csv_files": {"de": "CSV-Dateien", "en": "CSV files"},
     "all_files": {"de": "Alle Dateien", "en": "All files"},
-    "profile_editor_title": {"de": "Ausgabeformat bearbeiten", "en": "Edit output format"},
+    "profile_editor_title": {"de": "Profil bearbeiten", "en": "Edit profile"},
     "profile": {"de": "Profil:", "en": "Profile:"},
     "copy_as_new_profile": {"de": "Als neues Profil kopieren", "en": "Copy as new profile"},
+    "name": {"de": "Name:", "en": "Name:"},
     "description": {"de": "Beschreibung:", "en": "Description:"},
     "preamble_hint": {"de": "Präambel-Hinweis:", "en": "Preamble hint:"},
     "sort": {"de": "Sortierung:", "en": "Sort order:"},
     "escaping": {"de": "Maskierung:", "en": "Escaping:"},
-    "templates": {"de": "Vorlagen – Platzhalter: [[short]], [[long]], [[id]], [[category]], [[note]]", "en": "Templates – placeholders: [[short]], [[long]], [[id]], [[category]], [[note]]"},
+    "profile_templates_tab": {"de": "Rahmenvorlagen", "en": "Wrapper templates"},
+    "command_schema_tab": {"de": "Befehlsschema", "en": "Command schema"},
+    "command_schema_help": {
+        "de": "JSON-Liste unabhängiger Befehlstypen. Jeder Typ braucht id, label, template und fields. Feldoptionen: required, multiline, comparison_group, similarity_group, case_sensitive und output_template. In output_template ersetzt [[value]] den Feldwert; beispielsweise erzeugt [[[value]]] optionale eckige Klammern.",
+        "en": "JSON list of independent command types. Each type needs id, label, template, and fields. Field options include required, multiline, comparison_group, similarity_group, case_sensitive, and output_template. In output_template, [[value]] is replaced with the field value; for example, [[[value]]] creates optional square brackets.",
+    },
+    "command_schema_invalid_json": {"de": "Das Befehlsschema ist kein gültiges JSON:\n{error}", "en": "The command schema is not valid JSON:\n{error}"},
     "profile_file": {"de": "Profildatei: {path}", "en": "Profile file: {path}"},
     "save": {"de": "Speichern", "en": "Save"},
     "close": {"de": "Schließen", "en": "Close"},
@@ -146,46 +154,49 @@ _MESSAGES: dict[str, Mapping[str, str]] = {
     "new_profile_prompt": {"de": "ID für das neue Profil (z. B. my-format):", "en": "ID for the new profile (for example, my-format):"},
     "profile_id_exists": {"de": "Diese Profil-ID existiert bereits.", "en": "This profile ID already exists."},
     "profile_copy_name": {"de": "Kopie von {name}", "en": "Copy of {name}"},
-    "profile_required": {"de": "ID, Name und entry sind erforderlich.", "en": "ID, name, and entry are required."},
-    "profile_confirm": {
-        "de": "Profil-Hinweise:\n\n{warnings}\n\nTrotzdem speichern?",
-        "en": "Profile notes:\n\n{warnings}\n\nSave anyway?",
-    },
+    "profile_confirm": {"de": "Profil-Hinweise:\n\n{warnings}\n\nTrotzdem speichern?", "en": "Profile notes:\n\n{warnings}\n\nSave anyway?"},
     "profile_save_failed": {"de": "Profildatei konnte nicht gespeichert werden:\n{error}", "en": "The profile file could not be saved:\n{error}"},
-    "profile_saved": {"de": "Ausgabeprofil gespeichert.", "en": "Output profile saved."},
-    "error_enter_short": {"de": "Bitte ein Kürzel eingeben.", "en": "Enter a short form."},
-    "error_enter_long": {"de": "Bitte eine Langform eingeben.", "en": "Enter a long form."},
-    "error_short_linebreak": {"de": "Ein Kürzel darf keinen Zeilenumbruch enthalten.", "en": "A short form may not contain a line break."},
-    "error_long_linebreak": {"de": "Die Langform darf keinen Zeilenumbruch enthalten.", "en": "A long form may not contain a line break."},
-    "warning_short_whitespace": {"de": "Das Kürzel enthält Leerzeichen. Das ist erlaubt, aber ungewöhnlich.", "en": "The short form contains whitespace. This is allowed but unusual."},
-    "warning_long_punctuation": {"de": "Die Langform endet mit Satzzeichen. In Akronymverzeichnissen wird dies meist weggelassen.", "en": "The long form ends with punctuation. This is usually omitted in acronym lists."},
-    "warning_trimmed": {"de": "Führende oder nachgestellte Leerzeichen werden beim Speichern entfernt.", "en": "Leading or trailing whitespace is removed when saving."},
-    "warning_short_braces": {"de": "Das Kürzel enthält geschweifte Klammern. Prüfe die erzeugte LaTeX-Ausgabe besonders sorgfältig.", "en": "The short form contains braces. Check the generated LaTeX output carefully."},
+    "profile_saved": {"de": "Profil gespeichert.", "en": "Profile saved."},
+    "error_field_required": {"de": "{field} ist erforderlich.", "en": "{field} is required."},
+    "error_field_linebreak": {"de": "{field} darf keinen Zeilenumbruch enthalten.", "en": "{field} may not contain a line break."},
+    "warning_field_trimmed": {"de": "Bei {field} werden führende oder nachgestellte Leerzeichen entfernt.", "en": "Leading or trailing whitespace is removed from {field}."},
+    "warning_field_whitespace": {"de": "{field} enthält Leerzeichen. Das ist erlaubt, aber ungewöhnlich.", "en": "{field} contains whitespace. This is allowed but unusual."},
+    "warning_field_punctuation": {"de": "{field} endet mit Satzzeichen.", "en": "{field} ends with punctuation."},
+    "warning_field_braces": {"de": "{field} enthält geschweifte Klammern. Prüfe die LaTeX-Ausgabe sorgfältig.", "en": "{field} contains braces. Check the LaTeX output carefully."},
     "database_invalid_json": {"de": "Die Datenbank ist kein gültiges JSON: {error}", "en": "The database is not valid JSON: {error}"},
-    "database_invalid_shape": {"de": "Die Datenbank muss ein Objekt mit dem Feld 'acronyms' enthalten.", "en": "The database must be an object with an 'acronyms' field."},
+    "database_invalid_shape": {"de": "Die Datenbank muss 'entries' (neu) oder 'acronyms' (Legacy) enthalten.", "en": "The database must contain 'entries' (new) or 'acronyms' (legacy)."},
     "database_invalid_entry": {"de": "Jeder Datenbankeintrag muss ein JSON-Objekt sein.", "en": "Every database entry must be a JSON object."},
-    "profile_missing_id": {"de": "Ein Ausgabeprofil braucht eine ID.", "en": "An output profile needs an ID."},
-    "profile_invalid_id": {"de": "Profil-IDs dürfen nur Buchstaben, Zahlen, Punkt, Unterstrich und Bindestrich enthalten.", "en": "Profile IDs may contain only letters, numbers, dots, underscores, and hyphens."},
+    "profile_missing_id": {"de": "Ein Profil braucht eine ID.", "en": "A profile needs an ID."},
+    "profile_invalid_id": {"de": "Ungültige Profil-ID: {id}", "en": "Invalid profile ID: {id}"},
     "profile_missing_name": {"de": "Das Profil '{id}' braucht einen Namen.", "en": "Profile '{id}' needs a name."},
-    "profile_missing_entry": {"de": "Das Profil '{id}' braucht eine Eintragsvorlage.", "en": "Profile '{id}' needs an entry template."},
-    "profile_invalid_sort": {"de": "sort_by muss short, long, identifier, category oder none sein.", "en": "sort_by must be short, long, identifier, category, or none."},
+    "profile_missing_entry": {"de": "Das Legacy-Profil '{id}' braucht eine entry-Vorlage.", "en": "Legacy profile '{id}' needs an entry template."},
+    "profile_missing_commands": {"de": "Das Profil '{id}' braucht mindestens einen Befehlstyp.", "en": "Profile '{id}' needs at least one command type."},
+    "profile_duplicate_command_id": {"de": "Das Profil '{id}' enthält eine doppelte Befehlstyp-ID.", "en": "Profile '{id}' contains a duplicate command type ID."},
+    "profile_invalid_command": {"de": "Jeder Befehlstyp muss ein JSON-Objekt sein.", "en": "Each command type must be a JSON object."},
+    "profile_missing_command_id": {"de": "Ein Befehlstyp braucht eine ID.", "en": "A command type needs an ID."},
+    "profile_invalid_command_id": {"de": "Ungültige Befehlstyp-ID: {id}", "en": "Invalid command type ID: {id}"},
+    "profile_missing_command_template": {"de": "Der Befehlstyp '{command}' braucht eine Vorlage.", "en": "Command type '{command}' needs a template."},
+    "profile_missing_command_fields": {"de": "Der Befehlstyp '{command}' braucht mindestens ein Feld.", "en": "Command type '{command}' needs at least one field."},
+    "profile_duplicate_field_id": {"de": "Der Befehlstyp '{command}' enthält doppelte Feld-IDs.", "en": "Command type '{command}' contains duplicate field IDs."},
+    "profile_invalid_command_sort": {"de": "sort_by verweist im Befehlstyp '{command}' auf kein Feld.", "en": "sort_by in command type '{command}' does not name a field."},
+    "profile_invalid_field": {"de": "Der Befehlstyp '{command}' enthält ein ungültiges Feld.", "en": "Command type '{command}' contains an invalid field."},
+    "profile_missing_field_id": {"de": "Ein Feld im Befehlstyp '{command}' braucht eine ID.", "en": "A field in command type '{command}' needs an ID."},
+    "profile_invalid_field_id": {"de": "Ungültige Feld-ID: {field}", "en": "Invalid field ID: {field}"},
+    "profile_invalid_field_output_template": {"de": "Die output_template von '{field}' muss [[value]] enthalten.", "en": "The output_template for '{field}' must contain [[value]]."},
     "profile_invalid_escape": {"de": "escape_mode muss none, latex oder csv sein.", "en": "escape_mode must be none, latex, or csv."},
     "profile_invalid_json": {"de": "Die Profildatei ist kein gültiges JSON: {error}", "en": "The profile file is not valid JSON: {error}"},
     "profile_invalid_shape": {"de": "Die Profildatei muss eine JSON-Liste sein.", "en": "The profile file must be a JSON list."},
-    "profile_unknown_tokens": {"de": "Unbekannte Platzhalter in {field}: {tokens}", "en": "Unknown placeholders in {field}: {tokens}"},
-    "profile_missing_short": {"de": "Die Eintragsvorlage enthält weder [[short]] noch [[id]].", "en": "The entry template contains neither [[short]] nor [[id]]."},
+    "profile_unknown_command_tokens": {"de": "Unbekannte Platzhalter in {command}.{field}: {tokens}", "en": "Unknown placeholders in {command}.{field}: {tokens}"},
 }
+
 
 _INTERPOLATION_FIELD = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
 def translate(language: str, key: str, /, **values: object) -> str:
-    """Return a translated UI string and interpolate named values."""
+    """Return a translated message and interpolate only named braces safely."""
     message = _MESSAGES.get(key)
     if message is None:
         return key
     template = message.get(normalize_language(language), message["en"])
-    return _INTERPOLATION_FIELD.sub(
-        lambda match: str(values.get(match.group(1), match.group(0))),
-        template,
-    )
+    return _INTERPOLATION_FIELD.sub(lambda match: str(values.get(match.group(1), match.group(0))), template)

@@ -1,47 +1,74 @@
 {
-  "schema_version": 1,
-  "acronyms": [
+  "schema_version": 2,
+  "entries": [
     {
-      "short": "ADC",
-      "long": "analog to digital converter",
-      "category": "",
-      "note": "",
-      "uid": "a2b96942-9555-4c5d-85df-e74e0d9e4056"
+      "uid": "a2b96942-9555-4c5d-85df-e74e0d9e4056",
+      "command_id": "acronym",
+      "values": {
+        "short": "ADC",
+        "long": "analog to digital converter",
+        "category": "",
+        "note": ""
+      }
     },
     {
-      "short": "AGC",
-      "long": "automatic gain control",
-      "category": "",
-      "note": "",
-      "uid": "a5949acd-a9f3-4c34-bdfd-f2db286a7fd5"
+      "uid": "a5949acd-a9f3-4c34-bdfd-f2db286a7fd5",
+      "command_id": "acronym",
+      "values": {
+        "short": "AGC",
+        "long": "automatic gain control",
+        "category": "",
+        "note": ""
+      }
     },
     {
-      "short": "AHRS",
-      "long": "attitude heading reference system",
-      "category": "",
-      "note": "",
-      "uid": "08910073-d701-4c31-9240-2ad45531d2ec"
+      "uid": "08910073-d701-4c31-9240-2ad45531d2ec",
+      "command_id": "acronym",
+      "values": {
+        "short": "AHRS",
+        "long": "attitude heading reference system",
+        "category": "",
+        "note": ""
+      }
     },
     {
-      "short": "AI",
-      "long": "artificial intelligence",
-      "category": "",
-      "note": "",
-      "uid": "d63fa7eb-e4ac-43c0-ae50-1e396a53fb16"
+      "uid": "d63fa7eb-e4ac-43c0-ae50-1e396a53fb16",
+      "command_id": "acronym",
+      "values": {
+        "short": "AI",
+        "long": "artificial intelligence",
+        "category": "",
+        "note": ""
+      }
     },
     {
-      "short": "ANN",
-      "long": "artificial neural network",
-      "category": "",
-      "note": "",
-      "uid": "11f7f224-ed5e-468d-9069-21c54c16a15a"
+      "uid": "11f7f224-ed5e-468d-9069-21c54c16a15a",
+      "command_id": "acronym",
+      "values": {
+        "short": "ANN",
+        "long": "artificial neural network",
+        "category": "",
+        "note": ""
+      }
     },
     {
-      "short": "AOA",
-      "long": "angle of arrival",
-      "category": "",
-      "note": "",
-      "uid": "418814df-7b52-4519-9988-3f9e943857cb"
+      "uid": "418814df-7b52-4519-9988-3f9e943857cb",
+      "command_id": "acronym",
+      "values": {
+        "short": "AOA",
+        "long": "angle of arrival",
+        "category": "",
+        "note": ""
+      }
+    },
+    {
+      "uid": "e164d541-dd77-4d25-9ebd-0d6ad44795f2",
+      "command_id": "acroplural",
+      "values": {
+        "key": "AUV",
+        "short_plural": "AUVs",
+        "long_plural": "autonomous underwater vehicles"
+      }
     }
   ]
 }

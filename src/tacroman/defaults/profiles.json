@@ -1,67 +1,292 @@
 [
   {
+    "schema_version": 2,
     "id": "acronym-package",
     "name": "acronym package (input file)",
-    "description": "Produces an acronym environment with \\acro{SHORT}{long form}.",
+    "description": "Produces an acronym environment and independent command definitions for the acronym package.",
     "preamble_hint": "In the preamble: \\usepackage[printonlyused]{acronym}",
     "header": "\\begin{acronym}\n",
-    "entry": "\\acro{[[short]]}{[[long]]}",
     "footer": "\n\\end{acronym}\n",
     "separator": "\n",
     "sort_by": "short",
     "escape_mode": "none",
-    "usage_template": "\\ac{[[short]]}"
+    "usage_template": "",
+    "commands": [
+      {
+        "id": "acronym",
+        "label": "Acronym",
+        "description": "A standard \\acro definition.",
+        "template": "\\acro{[[short]]}{[[long]]}",
+        "usage_template": "\\ac{[[short]]}",
+        "fields": [
+          {
+            "id": "short",
+            "label": "Short form",
+            "required": true,
+            "comparison_group": "acronym-key",
+            "similarity_group": "short-form",
+            "warn_whitespace": true,
+            "warn_braces": true
+          },
+          {
+            "id": "long",
+            "label": "Long form",
+            "required": true,
+            "similarity_group": "long-form",
+            "warn_trailing_punctuation": true
+          },
+          {
+            "id": "category",
+            "label": "Category"
+          },
+          {
+            "id": "note",
+            "label": "Note",
+            "multiline": true
+          }
+        ]
+      },
+      {
+        "id": "acroplural",
+        "label": "Plural definition",
+        "description": "An independent \\acroplural command definition.",
+        "template": "\\acroplural{[[key]]}[[short_plural]]{[[long_plural]]}",
+        "sort_by": "key",
+        "fields": [
+          {
+            "id": "key",
+            "label": "Acronym key",
+            "required": true,
+            "comparison_group": "acronym-key",
+            "similarity_group": "short-form"
+          },
+          {
+            "id": "short_plural",
+            "label": "Short plural",
+            "output_template": "[[[value]]]"
+          },
+          {
+            "id": "long_plural",
+            "label": "Long plural",
+            "required": true,
+            "similarity_group": "long-form"
+          }
+        ]
+      }
+    ]
   },
   {
+    "schema_version": 2,
     "id": "acronym-complete-snippet",
     "name": "acronym package (complete block)",
     "description": "Produces the complete snippet, including the package line and acronym environment.",
     "preamble_hint": "Already includes \\usepackage[printonlyused]{acronym}. Use for direct insertion, not as an \\input file in the document body.",
     "header": "\\usepackage[printonlyused]{acronym}\n\n\\begin{acronym}\n",
-    "entry": "\\acro{[[short]]}{[[long]]}",
     "footer": "\n\\end{acronym}\n",
     "separator": "\n",
     "sort_by": "short",
     "escape_mode": "none",
-    "usage_template": "\\ac{[[short]]}"
+    "usage_template": "",
+    "commands": [
+      {
+        "id": "acronym",
+        "label": "Acronym",
+        "template": "\\acro{[[short]]}{[[long]]}",
+        "usage_template": "\\ac{[[short]]}",
+        "fields": [
+          {
+            "id": "short",
+            "label": "Short form",
+            "required": true,
+            "comparison_group": "acronym-key",
+            "similarity_group": "short-form",
+            "warn_whitespace": true,
+            "warn_braces": true
+          },
+          {
+            "id": "long",
+            "label": "Long form",
+            "required": true,
+            "similarity_group": "long-form",
+            "warn_trailing_punctuation": true
+          },
+          {
+            "id": "category",
+            "label": "Category"
+          },
+          {
+            "id": "note",
+            "label": "Note",
+            "multiline": true
+          }
+        ]
+      },
+      {
+        "id": "acroplural",
+        "label": "Plural definition",
+        "template": "\\acroplural{[[key]]}[[short_plural]]{[[long_plural]]}",
+        "sort_by": "key",
+        "fields": [
+          {
+            "id": "key",
+            "label": "Acronym key",
+            "required": true,
+            "comparison_group": "acronym-key",
+            "similarity_group": "short-form"
+          },
+          {
+            "id": "short_plural",
+            "label": "Short plural",
+            "output_template": "[[[value]]]"
+          },
+          {
+            "id": "long_plural",
+            "label": "Long plural",
+            "required": true,
+            "similarity_group": "long-form"
+          }
+        ]
+      }
+    ]
   },
   {
+    "schema_version": 2,
     "id": "acro-package",
     "name": "acro package",
     "description": "Produces individual \\DeclareAcronym definitions for the acro package.",
     "preamble_hint": "In the preamble: \\usepackage{acro}",
     "header": "",
-    "entry": "\\DeclareAcronym{[[id]]}{\n  short = [[short]],\n  long = [[long]]\n}",
     "footer": "\n",
     "separator": "\n\n",
     "sort_by": "short",
     "escape_mode": "none",
-    "usage_template": "\\ac{[[id]]}"
+    "usage_template": "",
+    "commands": [
+      {
+        "id": "acronym",
+        "label": "Acronym",
+        "template": "\\DeclareAcronym{[[id]]}{\n  short = [[short]],\n  long = [[long]]\n}",
+        "usage_template": "\\ac{[[id]]}",
+        "fields": [
+          {
+            "id": "short",
+            "label": "Short form",
+            "required": true,
+            "comparison_group": "acronym-key",
+            "similarity_group": "short-form",
+            "warn_whitespace": true,
+            "warn_braces": true
+          },
+          {
+            "id": "long",
+            "label": "Long form",
+            "required": true,
+            "similarity_group": "long-form",
+            "warn_trailing_punctuation": true
+          },
+          {
+            "id": "category",
+            "label": "Category"
+          },
+          {
+            "id": "note",
+            "label": "Note",
+            "multiline": true
+          }
+        ]
+      }
+    ]
   },
   {
+    "schema_version": 2,
     "id": "glossaries-extra",
     "name": "glossaries-extra",
     "description": "Produces \\newacronym{key}{SHORT}{long form}.",
     "preamble_hint": "In the preamble: \\usepackage[acronym]{glossaries-extra}",
     "header": "",
-    "entry": "\\newacronym{[[id]]}{[[short]]}{[[long]]}",
     "footer": "\n",
     "separator": "\n",
     "sort_by": "short",
     "escape_mode": "none",
-    "usage_template": "\\gls{[[id]]}"
+    "usage_template": "",
+    "commands": [
+      {
+        "id": "acronym",
+        "label": "Acronym",
+        "template": "\\newacronym{[[id]]}{[[short]]}{[[long]]}",
+        "usage_template": "\\gls{[[id]]}",
+        "fields": [
+          {
+            "id": "short",
+            "label": "Short form",
+            "required": true,
+            "comparison_group": "acronym-key",
+            "similarity_group": "short-form",
+            "warn_whitespace": true,
+            "warn_braces": true
+          },
+          {
+            "id": "long",
+            "label": "Long form",
+            "required": true,
+            "similarity_group": "long-form",
+            "warn_trailing_punctuation": true
+          },
+          {
+            "id": "category",
+            "label": "Category"
+          },
+          {
+            "id": "note",
+            "label": "Note",
+            "multiline": true
+          }
+        ]
+      }
+    ]
   },
   {
+    "schema_version": 2,
     "id": "csv",
     "name": "CSV export",
     "description": "A portable export for spreadsheets and other programs.",
     "preamble_hint": "No LaTeX preamble is required.",
     "header": "short,long,category,note\n",
-    "entry": "[[short]],[[long]],[[category]],[[note]]",
     "footer": "\n",
     "separator": "\n",
     "sort_by": "short",
     "escape_mode": "csv",
-    "usage_template": ""
+    "usage_template": "",
+    "commands": [
+      {
+        "id": "acronym",
+        "label": "Acronym",
+        "template": "[[short]],[[long]],[[category]],[[note]]",
+        "fields": [
+          {
+            "id": "short",
+            "label": "Short form",
+            "required": true,
+            "comparison_group": "acronym-key",
+            "similarity_group": "short-form"
+          },
+          {
+            "id": "long",
+            "label": "Long form",
+            "required": true,
+            "similarity_group": "long-form"
+          },
+          {
+            "id": "category",
+            "label": "Category"
+          },
+          {
+            "id": "note",
+            "label": "Note",
+            "multiline": true
+          }
+        ]
+      }
+    ]
   }
 ]

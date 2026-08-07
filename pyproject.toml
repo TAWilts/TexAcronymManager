@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tacroman"
-version = "0.2.2"
-description = "A dependency-free desktop manager for LaTeX acronym definitions"
+version = "0.3.0"
+description = "A dependency-free desktop manager for profile-defined LaTeX commands"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 readme = "README.md"

@@ -1,30 +1,18 @@
 # TAcroMan
 
-TAcroMan (TeX Acronym Manager) is a small, dependency-free desktop application
-for maintaining LaTeX acronym definitions. Its source of truth is a portable
-JSON file; a configurable output profile then writes the corresponding TeX
-file. The project is available at
+TAcroMan is a small, dependency-free desktop application for maintaining
+profile-defined LaTeX command entries. It started as a TeX acronym manager; the
+name remains, but version 0.3 no longer hard-codes an acronym package or any
+relationship between commands.
+
+The JSON database is the source of truth. A selected JSON profile defines
+independent command types, their fields, comparison rules, and the generated
+TeX output. The project is available at
 [TAWilts/TexAcronymManager](https://github.com/TAWilts/TexAcronymManager).
 
 The graphical interface is available in German and English. Use the
 **Language** menu in the menu bar to switch at any time; the choice is stored
 beside the selected database.
-
-## Features
-
-- Immediate search across short form, long form, category, and note.
-- Live duplicate detection for both the short form and long form. A duplicate
-  short form is reported as soon as it is typed, even before the long form is
-  complete.
-- Similarity hints, basic formatting checks, and a generated-output preview.
-- After saving an acronym, the editor is cleared and keyboard focus returns to
-  the short-form field, ready for the next entry.
-- Import a `.tex` file containing existing `\acro{SHORT}{long form}`
-  definitions, including simple nested LaTeX braces and common text encodings.
-- Atomic writes for the JSON database and generated file, which is helpful for
-  Dropbox/Overleaf synchronization.
-- Configurable output profiles for `acronym`, `acro`, `glossaries-extra`, CSV,
-  and custom formats.
 
 ## Development transparency
 
@@ -33,106 +21,206 @@ Max** by OpenAI. ChatGPT substantially drafted the application code, tests, and
 documentation. The repository owner directs the project and remains responsible
 for reviewing, maintaining, and releasing the software.
 
-## Use with the `acronym` package
+## Features
 
-TAcroMan's default profile produces this file:
+- Generic, profile-defined command types rendered as editor tabs.
+- Fields generated directly from each command definition.
+- Live duplicate handling: same comparison key in the **same command type** is
+  a blocking error; the same key in a **different command type** is a
+  non-blocking warning.
+- No hard-coded parent, primary, supplement, or package semantics.
+- Optional similarity hints, search, required-field checks, and configurable
+  field warnings.
+- Atomic JSON/output writes suitable for Dropbox/Overleaf synchronization.
+- Import of existing \acro{SHORT}{long form} definitions.
+- Built-in profiles for acronym, acro, glossaries-extra, and CSV.
 
-```tex
-\begin{acronym}
-\acro{ADC}{analog to digital converter}
-\acro{AGC}{automatic gain control}
-\end{acronym}
-```
+## Command-definition profiles
 
-For a typical Overleaf project, create the database and output file within the
-synchronized project folder, for example:
+Each profile contains a "commands" list. Its items are fully independent
+command types. This is a shortened example from the built-in
+"acronym-package" profile:
 
-```text
+~~~json
+{
+  "id": "acronym-package",
+  "header": "\\begin{acronym}\n",
+  "footer": "\n\\end{acronym}\n",
+  "separator": "\n",
+  "commands": [
+    {
+      "id": "acronym",
+      "label": "Acronym",
+      "template": "\\acro{[[short]]}{[[long]]}",
+      "usage_template": "\\ac{[[short]]}",
+      "fields": [
+        {
+          "id": "short",
+          "label": "Short form",
+          "required": true,
+          "comparison_group": "acronym-key"
+        },
+        {
+          "id": "long",
+          "label": "Long form",
+          "required": true,
+          "similarity_group": "long-form"
+        }
+      ]
+    },
+    {
+      "id": "acroplural",
+      "label": "Plural definition",
+      "template": "\\acroplural{[[key]]}[[short_plural]]{[[long_plural]]}",
+      "fields": [
+        {
+          "id": "key",
+          "label": "Acronym key",
+          "required": true,
+          "comparison_group": "acronym-key"
+        },
+        {
+          "id": "short_plural",
+          "label": "Short plural",
+          "output_template": "[[[value]]]"
+        },
+        {
+          "id": "long_plural",
+          "label": "Long plural",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
+~~~
+
+The "acronym" and "acroplural" command IDs above are only profile data.
+Entering AUV as "short" for an "acronym" entry and as "key" for an
+"acroplural" entry produces a warning because both fields share
+"comparison_group": "acronym-key"; both entries may still be saved. A second
+"acronym" entry with the same "short" value is blocked.
+
+### Field options
+
+| Property | Meaning |
+| --- | --- |
+| id | Required machine-readable field ID, used as a placeholder. |
+| label | Text shown beside the field. |
+| required | Blocks saving when the field is empty. |
+| multiline | Renders a multi-line text field and permits line breaks. |
+| comparison_group | Enables exact duplicate checks with matching groups. |
+| similarity_group | Enables non-blocking similarity hints with matching groups. |
+| case_sensitive | Uses case-sensitive comparison for this field. |
+| output_template | Wraps a non-empty value; it must include [[value]]. |
+
+Templates may use every field ID declared by their own command, plus [[id]]
+(a generated identifier unless an id field is present) and [[command]]. An
+optional short plural with output template "[[[value]]]" renders as [AUVs];
+when empty, it renders as nothing.
+
+Use **Profiles → Edit active profile… → Command schema** to edit these JSON
+definitions or clone a built-in profile before customizing it.
+
+## Backward compatibility
+
+TAcroMan 0.3 loads all databases created by 0.1/0.2:
+
+~~~json
+{
+  "schema_version": 1,
+  "acronyms": [
+    {"short": "AUV", "long": "autonomous underwater vehicle"}
+  ]
+}
+~~~
+
+On the next save it migrates them to the generic v2 structure:
+
+~~~json
+{
+  "schema_version": 2,
+  "entries": [
+    {
+      "command_id": "acronym",
+      "values": {
+        "short": "AUV",
+        "long": "autonomous underwater vehicle"
+      }
+    }
+  ]
+}
+~~~
+
+Legacy render-profile files with a single top-level "entry" template are also
+loaded automatically as a profile containing one generic "acronym" command.
+
+Generic exporting is profile-driven. TeX importing is deliberately narrower:
+the built-in importer currently understands the established
+\acro{SHORT}{long form} syntax only. Other command formats can still be
+created and edited through the generic database/UI, while their import parsers
+can be added separately when needed.
+
+## Use with the acronym package
+
+For a typical Overleaf project, create the database and output file in the
+synchronized project folder:
+
+~~~text
 metadata/
 ├── acronyms.json     # maintained by TAcroMan
 └── acronyms.tex      # generated by TAcroMan
-```
+~~~
 
 Keep the package line in the preamble:
 
-```tex
+~~~tex
 \usepackage[printonlyused]{acronym}
-```
+~~~
 
 Then place the generated environment where the acronym list should appear:
 
-```tex
+~~~tex
 \input{metadata/acronyms}
-```
+~~~
 
-For the first migration, choose **File → Import TeX file…** and select either
-the existing acronym file or the main `.tex` file containing the definitions.
-
-## Output profiles
-
-The built-in profiles are:
-
-| Profile | Purpose |
-| --- | --- |
-| `acronym-package` | An `acronym` environment for `\input{...}` |
-| `acronym-complete-snippet` | A complete snippet including `\usepackage[printonlyused]{acronym}` |
-| `acro-package` | `\DeclareAcronym` definitions for `acro` |
-| `glossaries-extra` | `\newacronym` definitions |
-| `csv` | A portable CSV export |
-
-Profiles can be edited or copied from **Output profiles**. Templates use these
-placeholders:
-
-```text
-[[short]]     printed short form, for example AUV
-[[long]]      long form
-[[id]]        generated identifier, for example auv
-[[category]]  optional category
-[[note]]      optional note
-```
-
-For example, a custom entry template can be:
-
-```tex
-\myacronym{[[short]]}{[[long]]}
-```
+For the first migration, select **File → Import TeX file…** and choose either
+the existing acronym file or the main .tex file containing the definitions.
 
 ## Start
 
-Requirements: Python 3.10 or later with `tkinter` (included with standard
-Windows Python installations).
+Requirements: Python 3.10 or later with tkinter (included with standard Windows
+Python installations).
 
-On Windows, extract the ZIP archive and double-click `start_windows.bat`.
+On Windows, extract the ZIP archive and double-click start_windows.bat.
 Alternatively, run:
 
-```bash
+~~~bash
 python run.py
-```
+~~~
 
 To install the project in editable mode during development:
 
-```bash
+~~~bash
 python -m pip install -e .
-tacroman --database /path/to/acronyms.json --output /path/to/acronyms.tex
-```
+tacroman --database /path/to/entries.json --output /path/to/commands.tex
+~~~
 
 ## Tests
 
-The core tests use only the Python standard library:
-
-```bash
+~~~bash
 python -m unittest discover -s tests -v
-```
+~~~
 
 ## Project layout
 
-```text
+~~~text
 src/tacroman/
-  app.py          Tkinter user interface
+  app.py          Tkinter UI and generic command tabs
   i18n.py         German and English user-interface texts
-  importing.py    TeX import helpers
-  model.py        Data model, validation, and duplicate matching
-  profiles.py     Output-profile loading and persistence
+  importing.py    Targeted TeX import helpers
+  model.py        Generic entries, validation, and comparison logic
+  profiles.py     Profile-schema loading and migration
   rendering.py    Profile-based output generation
   storage.py      Atomic JSON and text persistence
-```
+~~~

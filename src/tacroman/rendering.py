@@ -1,4 +1,4 @@
-"""Render entries using a profile without requiring a template dependency."""
+"""Render generic command entries from profile-defined templates."""
 
 from __future__ import annotations
 
@@ -8,10 +8,12 @@ import re
 from typing import Callable
 
 from .i18n import translate
-from .model import Acronym
+from .model import Acronym, CommandEntry, acronym_to_entry, command_fields, command_map, make_identifier
 
-TOKEN_PATTERN = re.compile(r"\[\[([a-z_]+)\]\]")
-ALLOWED_TOKENS = {"short", "long", "id", "category", "note"}
+
+TOKEN_PATTERN = re.compile(r"\[\[([A-Za-z][A-Za-z0-9_]*)\]\]")
+VALUE_TOKEN_PATTERN = re.compile(r"\[\[value\]\]")
+SPECIAL_TOKENS = {"id", "command"}
 
 _LATEX_ESCAPES = {
     "\\": r"\textbackslash{}",
@@ -41,56 +43,126 @@ def _escape_function(mode: str) -> Callable[[str], str]:
     return {"none": lambda value: value, "latex": latex_escape, "csv": csv_escape}[mode]
 
 
-def profile_template_warnings(profile: dict[str, str], *, language: str = "en") -> list[str]:
-    warnings: list[str] = []
-    for field in ("header", "entry", "footer", "separator", "usage_template"):
-        unknown = set(TOKEN_PATTERN.findall(profile.get(field, ""))) - ALLOWED_TOKENS
-        if unknown:
-            warnings.append(translate(language, "profile_unknown_tokens", field=field, tokens=", ".join(sorted(unknown))))
-    if "[[short]]" not in profile.get("entry", "") and "[[id]]" not in profile.get("entry", ""):
-        warnings.append(translate(language, "profile_missing_short"))
-    return warnings
-
-
 def _replace_tokens(template: str, values: dict[str, str]) -> str:
     return TOKEN_PATTERN.sub(lambda match: values.get(match.group(1), match.group(0)), template)
 
 
-def render(entries: list[Acronym], profile: dict[str, str]) -> str:
-    """Render an output file.  No text is added that the profile did not ask for."""
-    mode = profile.get("escape_mode", "none")
-    escape = _escape_function(mode)
-    sort_by = profile.get("sort_by", "short")
-    ordered = list(entries)
-    if sort_by != "none":
-        ordered.sort(key=lambda entry: getattr(entry, sort_by).casefold())
+def _identifier_seed(entry: CommandEntry, command: dict[str, object]) -> str:
+    for field_id in ("short", "key"):
+        if entry.value(field_id).strip():
+            return entry.value(field_id).strip()
+    for field in command_fields(command):
+        value = entry.value(str(field["id"])).strip()
+        if value:
+            return value
+    return entry.command_id
 
-    rendered_entries: list[str] = []
-    for acronym in ordered:
-        values = {
-            "short": escape(acronym.short.strip()),
-            "long": escape(acronym.long.strip()),
-            "id": escape(acronym.identifier),
-            "category": escape(acronym.category.strip()),
-            "note": escape(acronym.note.strip()),
-        }
-        rendered_entries.append(_replace_tokens(profile["entry"], values))
 
+def values_for_entry(
+    entry: CommandEntry,
+    command: dict[str, object],
+    *,
+    escape_mode: str = "none",
+) -> dict[str, str]:
+    """Resolve field values and optional field-specific output wrappers."""
+    escape = _escape_function(escape_mode)
+    values: dict[str, str] = {}
+    for field in command_fields(command):
+        field_id = str(field["id"])
+        raw_value = entry.value(field_id).strip()
+        if not raw_value:
+            values[field_id] = ""
+            continue
+        output_template = str(field.get("output_template", "[[value]]"))
+        values[field_id] = VALUE_TOKEN_PATTERN.sub(lambda _match: escape(raw_value), output_template)
+
+    explicit_identifier = entry.value("id").strip()
+    values["id"] = escape(explicit_identifier or make_identifier(_identifier_seed(entry, command)))
+    values["command"] = escape(entry.command_id)
+    return values
+
+
+def profile_template_warnings(profile: dict[str, object], *, language: str = "en") -> list[str]:
+    """Return non-blocking messages for unknown placeholders in a profile."""
+    warnings: list[str] = []
+    for command in profile.get("commands", []):
+        if not isinstance(command, dict):
+            continue
+        command_id = str(command.get("id", "?"))
+        allowed = {str(field["id"]) for field in command_fields(command)} | SPECIAL_TOKENS
+        for template_key in ("template", "usage_template"):
+            unknown = set(TOKEN_PATTERN.findall(str(command.get(template_key, "")))) - allowed
+            if unknown:
+                warnings.append(
+                    translate(
+                        language,
+                        "profile_unknown_command_tokens",
+                        command=command_id,
+                        field=template_key,
+                        tokens=", ".join(sorted(unknown)),
+                    )
+                )
+        for field in command_fields(command):
+            output_template = str(field.get("output_template", "[[value]]"))
+            if "[[value]]" not in output_template:
+                warnings.append(
+                    translate(language, "profile_invalid_field_output_template", field=str(field["id"]))
+                )
+    return warnings
+
+
+def _sort_key(entry: CommandEntry, command: dict[str, object], profile: dict[str, object]) -> str:
+    sort_by = str(command.get("sort_by") or profile.get("sort_by") or "none")
+    if sort_by == "none":
+        return ""
+    if sort_by == "identifier":  # 0.2.x spelling retained for old profiles.
+        sort_by = "id"
+    return values_for_entry(entry, command, escape_mode="none").get(sort_by, "").casefold()
+
+
+def _as_command_entries(entries: list[CommandEntry | Acronym]) -> list[CommandEntry]:
+    return [acronym_to_entry(entry) if isinstance(entry, Acronym) else entry for entry in entries]
+
+
+def rendered_entries(entries: list[CommandEntry | Acronym], profile: dict[str, object]) -> list[CommandEntry]:
+    """Return exactly the entries rendered by the active profile, in order."""
+    result: list[CommandEntry] = []
+    command_entries = _as_command_entries(entries)
+    for command in profile.get("commands", []):
+        if not isinstance(command, dict):
+            continue
+        command_id = str(command["id"])
+        group = [entry for entry in command_entries if entry.command_id == command_id]
+        if str(command.get("sort_by") or profile.get("sort_by") or "none") != "none":
+            group.sort(key=lambda entry: _sort_key(entry, command, profile))
+        result.extend(group)
+    return result
+
+
+def render(entries: list[CommandEntry | Acronym], profile: dict[str, object]) -> str:
+    """Render an output file exclusively from the active profile definition."""
+    commands = command_map(profile)
+    mode = str(profile.get("escape_mode", "none"))
+    rendered_lines: list[str] = []
+    for entry in rendered_entries(entries, profile):
+        command = commands[entry.command_id]
+        values = values_for_entry(entry, command, escape_mode=mode)
+        rendered_lines.append(_replace_tokens(str(command["template"]), values))
     return "".join(
         (
-            _replace_tokens(profile.get("header", ""), {}),
-            profile.get("separator", "\n").join(rendered_entries),
-            _replace_tokens(profile.get("footer", ""), {}),
+            str(profile.get("header", "")),
+            str(profile.get("separator", "\n")).join(rendered_lines),
+            str(profile.get("footer", "")),
         )
     )
 
 
-def usage_for(acronym: Acronym, profile: dict[str, str]) -> str:
-    values = {
-        "short": acronym.short.strip(),
-        "long": acronym.long.strip(),
-        "id": acronym.identifier,
-        "category": acronym.category.strip(),
-        "note": acronym.note.strip(),
-    }
-    return _replace_tokens(profile.get("usage_template", ""), values)
+def usage_for(entry: CommandEntry, profile: dict[str, object]) -> str:
+    """Return the command-specific usage snippet, if the profile defines one."""
+    command = command_map(profile).get(entry.command_id)
+    if command is None:
+        return ""
+    template = str(command.get("usage_template") or profile.get("usage_template") or "")
+    if not template:
+        return ""
+    return _replace_tokens(template, values_for_entry(entry, command, escape_mode="none"))
