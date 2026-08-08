@@ -5,7 +5,7 @@ profile-defined LaTeX command entries. It started as a TeX acronym manager; the
 name remains, but version 0.3 no longer hard-codes an acronym package or any
 relationship between commands.
 
-<img width="1080" height="716" alt="grafik" src="https://github.com/user-attachments/assets/6adc0f6a-4742-4ff3-95f9-f3ec9c40c6ff" />
+<img width="610" height="404" alt="Screenshot 2026-08-08 102512" src="https://github.com/user-attachments/assets/adc97f9e-85b3-4c49-b395-5175b0a8d51d" />
 
 
 The JSON database is the source of truth. A selected JSON profile defines
