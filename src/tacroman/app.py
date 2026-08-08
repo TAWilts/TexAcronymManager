@@ -23,7 +23,7 @@ from .model import (
     validate_entry,
 )
 from .profiles import load_profiles, normalise_profile, save_profiles
-from .rendering import preview_diff, profile_template_warnings, render, rendered_entries, usage_for
+from .rendering import preview_diff, profile_template_warnings, render, usage_for
 from .storage import atomic_write_text, load_database, load_settings, save_database, save_settings
 
 
@@ -475,6 +475,28 @@ class TAcroManApp(tk.Tk):
         self._update_table_headings()
         self._refresh_table()
 
+    def _sort_entries_for_table(
+        self,
+        entries: list[CommandEntry],
+        commands: dict[str, dict[str, object]],
+    ) -> list[CommandEntry]:
+        return sorted(
+            entries,
+            key=lambda entry: self._table_sort_key(entry, commands[entry.command_id]),
+            reverse=self._table_sort_reverse,
+        )
+
+    def _entries_in_table_order(self) -> list[CommandEntry]:
+        """Return all active-profile entries in the current table sort order.
+
+        The search field deliberately does not affect generated output: it
+        only narrows the visible table and must never make entries disappear
+        from the preview or output file.
+        """
+        commands = self._visible_command_map()
+        entries = [entry for entry in self.entries if entry.command_id in commands]
+        return self._sort_entries_for_table(entries, commands)
+
     def _filtered_entries(self) -> list[CommandEntry]:
         commands = self._visible_command_map()
         query = self.search_var.get().strip().casefold()
@@ -486,11 +508,7 @@ class TAcroManApp(tk.Tk):
                 if query in entry.command_id.casefold()
                 or any(query in value.casefold() for value in entry.values.values())
             ]
-        return sorted(
-            entries,
-            key=lambda entry: self._table_sort_key(entry, commands[entry.command_id]),
-            reverse=self._table_sort_reverse,
-        )
+        return self._sort_entries_for_table(entries, commands)
 
     def _table_sort_key(self, entry: CommandEntry, command: dict[str, object]) -> tuple[str, str, str, str]:
         command_label = str(command.get("label") or entry.command_id)
@@ -704,8 +722,8 @@ class TAcroManApp(tk.Tk):
             warnings = profile_template_warnings(profile, language=self.language)
             if warnings:
                 messagebox.showwarning(APP_NAME, self.t("profile_warning", warnings="\n".join(warnings)))
-            rendered = rendered_entries(self.entries, profile)
-            atomic_write_text(self.output_path, render(self.entries, profile))
+            rendered = self._entries_in_table_order()
+            atomic_write_text(self.output_path, render(rendered, profile, preserve_input_order=True))
             self._save_workspace_settings()
             omitted = len(self.entries) - len(rendered)
             status_key = "output_status_written_with_omitted" if omitted else "output_status_written"
@@ -908,7 +926,7 @@ class TAcroManApp(tk.Tk):
     def _preview_output(self) -> None:
         profile = self._active_profile()
         profile_id = str(profile.get("id", ""))
-        output = render(self.entries, profile)
+        output = render(self._entries_in_table_order(), profile, preserve_input_order=True)
         changes = preview_diff(self._last_preview_output_by_profile.get(profile_id), output)
         self._last_preview_output_by_profile[profile_id] = output
 

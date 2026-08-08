@@ -135,10 +135,29 @@ def _as_command_entries(entries: list[CommandEntry | Acronym]) -> list[CommandEn
     return [acronym_to_entry(entry) if isinstance(entry, Acronym) else entry for entry in entries]
 
 
-def rendered_entries(entries: list[CommandEntry | Acronym], profile: dict[str, object]) -> list[CommandEntry]:
-    """Return exactly the entries rendered by the active profile, in order."""
-    result: list[CommandEntry] = []
+def rendered_entries(
+    entries: list[CommandEntry | Acronym],
+    profile: dict[str, object],
+    *,
+    preserve_input_order: bool = False,
+) -> list[CommandEntry]:
+    """Return exactly the entries rendered by the active profile, in order.
+
+    ``preserve_input_order`` is used by the desktop app when the user has
+    chosen a column order in the entry table. It intentionally bypasses the
+    profile's command grouping and ``sort_by`` settings while still omitting
+    entries whose command type is not part of the active profile.
+    """
     command_entries = _as_command_entries(entries)
+    if preserve_input_order:
+        known_command_ids = {
+            str(command["id"])
+            for command in profile.get("commands", [])
+            if isinstance(command, dict)
+        }
+        return [entry for entry in command_entries if entry.command_id in known_command_ids]
+
+    result: list[CommandEntry] = []
     for command in profile.get("commands", []):
         if not isinstance(command, dict):
             continue
@@ -150,12 +169,17 @@ def rendered_entries(entries: list[CommandEntry | Acronym], profile: dict[str, o
     return result
 
 
-def render(entries: list[CommandEntry | Acronym], profile: dict[str, object]) -> str:
+def render(
+    entries: list[CommandEntry | Acronym],
+    profile: dict[str, object],
+    *,
+    preserve_input_order: bool = False,
+) -> str:
     """Render an output file exclusively from the active profile definition."""
     commands = command_map(profile)
     mode = str(profile.get("escape_mode", "none"))
     rendered_lines: list[str] = []
-    for entry in rendered_entries(entries, profile):
+    for entry in rendered_entries(entries, profile, preserve_input_order=preserve_input_order):
         command = commands[entry.command_id]
         values = values_for_entry(entry, command, escape_mode=mode)
         rendered_lines.append(_replace_tokens(str(command["template"]), values))

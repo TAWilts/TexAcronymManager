@@ -113,6 +113,24 @@ class TAcroManTests(unittest.TestCase):
             "\\end{acronym}\n",
         )
 
+    def test_render_can_preserve_the_supplied_table_order(self) -> None:
+        entries = [
+            CommandEntry(
+                "acroplural",
+                {"key": "AUV", "short_plural": "AUVs", "long_plural": "autonomous underwater vehicles"},
+            ),
+            CommandEntry("acronym", {"short": "DVL", "long": "Doppler velocity log"}),
+            CommandEntry("acronym", {"short": "ADC", "long": "analog to digital converter"}),
+        ]
+
+        self.assertEqual(
+            render(entries, self.acronym_profile, preserve_input_order=True),
+            "\\begin{acronym}\n"
+            "\\acroplural{AUV}[AUVs]{autonomous underwater vehicles}\n"
+            "\\acro{DVL}{Doppler velocity log}\n"
+            "\\acro{ADC}{analog to digital converter}\n\\end{acronym}\n",
+        )
+
     def test_custom_commands_are_not_acronym_specific(self) -> None:
         profile = normalise_profile(
             {
@@ -263,6 +281,24 @@ class TAcroManTests(unittest.TestCase):
             ],
             ["ADC", "AUV", "DVL"],
         )
+        self.assertEqual(
+            [
+                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
+                for entry in TAcroManApp._entries_in_table_order(app)
+            ],
+            ["ADC", "AUV", "DVL"],
+        )
+        self.assertEqual(
+            render(
+                TAcroManApp._entries_in_table_order(app),
+                self.acronym_profile,
+                preserve_input_order=True,
+            ),
+            "\\begin{acronym}\n"
+            "\\acro{ADC}{analog to digital converter}\n"
+            "\\acroplural{AUV}{autonomous underwater vehicles}\n"
+            "\\acro{DVL}{Doppler velocity log}\n\\end{acronym}\n",
+        )
 
         TAcroManApp._set_table_sort(app, "key")
         self.assertTrue(app._table_sort_reverse)
@@ -272,6 +308,33 @@ class TAcroManTests(unittest.TestCase):
                 for entry in TAcroManApp._filtered_entries(app)
             ],
             ["DVL", "AUV", "ADC"],
+        )
+
+    def test_table_order_for_output_keeps_all_entries_when_search_is_active(self) -> None:
+        app = object.__new__(TAcroManApp)
+        app.entries = [
+            CommandEntry("acronym", {"short": "DVL", "long": "Doppler velocity log"}),
+            CommandEntry("acroplural", {"key": "AUV", "long_plural": "autonomous underwater vehicles"}),
+            CommandEntry("acronym", {"short": "ADC", "long": "analog to digital converter"}),
+        ]
+        app.search_var = _StringVariable("DVL")
+        app._table_sort_column = "key"
+        app._table_sort_reverse = False
+        app._visible_command_map = lambda: self.commands
+
+        self.assertEqual(
+            [
+                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
+                for entry in TAcroManApp._filtered_entries(app)
+            ],
+            ["DVL"],
+        )
+        self.assertEqual(
+            [
+                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
+                for entry in TAcroManApp._entries_in_table_order(app)
+            ],
+            ["ADC", "AUV", "DVL"],
         )
 
     def test_legacy_database_loads_and_new_save_migrates(self) -> None:
