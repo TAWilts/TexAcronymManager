@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import dataclass
+from difflib import SequenceMatcher
 from io import StringIO
 import re
-from typing import Callable
+from typing import Callable, Literal
 
 from .i18n import translate
 from .model import Acronym, CommandEntry, acronym_to_entry, command_fields, command_map, make_identifier
@@ -14,6 +16,15 @@ from .model import Acronym, CommandEntry, acronym_to_entry, command_fields, comm
 TOKEN_PATTERN = re.compile(r"\[\[([A-Za-z][A-Za-z0-9_]*)\]\]")
 VALUE_TOKEN_PATTERN = re.compile(r"\[\[value\]\]")
 SPECIAL_TOKENS = {"id", "command"}
+
+
+@dataclass(frozen=True)
+class PreviewLine:
+    """One display line in a preview, optionally annotated with its change type."""
+
+    text: str
+    change: Literal["unchanged", "added", "removed"]
+
 
 _LATEX_ESCAPES = {
     "\\": r"\textbackslash{}",
@@ -155,6 +166,30 @@ def render(entries: list[CommandEntry | Acronym], profile: dict[str, object]) ->
             str(profile.get("footer", "")),
         )
     )
+
+
+def preview_diff(previous: str | None, current: str) -> list[PreviewLine]:
+    """Return a line-oriented preview diff, keeping removed lines visible.
+
+    The first preview has no comparison baseline, so every line is unchanged.
+    Removed lines are display-only; callers should copy ``current`` rather than
+    reconstructing it from this result.
+    """
+    current_lines = current.splitlines(keepends=True)
+    if previous is None:
+        return [PreviewLine(line, "unchanged") for line in current_lines]
+
+    previous_lines = previous.splitlines(keepends=True)
+    result: list[PreviewLine] = []
+    matcher = SequenceMatcher(None, previous_lines, current_lines, autojunk=False)
+    for change, old_start, old_end, new_start, new_end in matcher.get_opcodes():
+        if change == "equal":
+            result.extend(PreviewLine(line, "unchanged") for line in current_lines[new_start:new_end])
+        if change in {"delete", "replace"}:
+            result.extend(PreviewLine(line, "removed") for line in previous_lines[old_start:old_end])
+        if change in {"insert", "replace"}:
+            result.extend(PreviewLine(line, "added") for line in current_lines[new_start:new_end])
+    return result
 
 
 def usage_for(entry: CommandEntry, profile: dict[str, object]) -> str:

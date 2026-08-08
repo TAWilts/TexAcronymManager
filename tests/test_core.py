@@ -13,7 +13,7 @@ from tacroman.i18n import normalize_language, translate
 from tacroman.importing import parse_acronym_package, read_tex_file
 from tacroman.model import CommandEntry, command_map, comparison_matches, similarity_matches, validate_entry
 from tacroman.profiles import load_profiles, normalise_profile
-from tacroman.rendering import render, values_for_entry
+from tacroman.rendering import preview_diff, render, values_for_entry
 from tacroman.storage import load_database, save_database
 
 
@@ -220,6 +220,58 @@ class TAcroManTests(unittest.TestCase):
         self.assertEqual(
             values_for_entry(CommandEntry("x", {"value": r"\textit{AUV}"}), command)["value"],
             r"[\textit{AUV}]",
+        )
+
+    def test_preview_diff_marks_changed_lines_and_keeps_removed_ones_visible(self) -> None:
+        previous = "header\nold line\nfooter\n"
+        current = "header\nnew line\nfooter\n"
+
+        self.assertEqual(
+            [(line.change, line.text) for line in preview_diff(previous, current)],
+            [
+                ("unchanged", "header\n"),
+                ("removed", "old line\n"),
+                ("added", "new line\n"),
+                ("unchanged", "footer\n"),
+            ],
+        )
+
+    def test_first_preview_has_no_change_markers(self) -> None:
+        self.assertEqual(
+            [(line.change, line.text) for line in preview_diff(None, "one\ntwo\n")],
+            [("unchanged", "one\n"), ("unchanged", "two\n")],
+        )
+
+    def test_table_defaults_to_key_sorting_and_heading_click_toggles_direction(self) -> None:
+        app = object.__new__(TAcroManApp)
+        app.entries = [
+            CommandEntry("acronym", {"short": "DVL", "long": "Doppler velocity log"}),
+            CommandEntry("acroplural", {"key": "AUV", "long_plural": "autonomous underwater vehicles"}),
+            CommandEntry("acronym", {"short": "ADC", "long": "analog to digital converter"}),
+        ]
+        app.search_var = _StringVariable("")
+        app._table_sort_column = "key"
+        app._table_sort_reverse = False
+        app._visible_command_map = lambda: self.commands
+        app._update_table_headings = lambda: None
+        app._refresh_table = lambda: None
+
+        self.assertEqual(
+            [
+                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
+                for entry in TAcroManApp._filtered_entries(app)
+            ],
+            ["ADC", "AUV", "DVL"],
+        )
+
+        TAcroManApp._set_table_sort(app, "key")
+        self.assertTrue(app._table_sort_reverse)
+        self.assertEqual(
+            [
+                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
+                for entry in TAcroManApp._filtered_entries(app)
+            ],
+            ["DVL", "AUV", "ADC"],
         )
 
     def test_legacy_database_loads_and_new_save_migrates(self) -> None:

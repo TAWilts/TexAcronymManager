@@ -23,7 +23,7 @@ from .model import (
     validate_entry,
 )
 from .profiles import load_profiles, normalise_profile, save_profiles
-from .rendering import profile_template_warnings, render, rendered_entries, usage_for
+from .rendering import preview_diff, profile_template_warnings, render, rendered_entries, usage_for
 from .storage import atomic_write_text, load_database, load_settings, save_database, save_settings
 
 
@@ -162,6 +162,9 @@ class TAcroManApp(tk.Tk):
         self._language_refresh_after_id: str | None = None
         self._rendered_language = ""
         self._suppress_command_change = False
+        self._last_preview_output_by_profile: dict[str, str] = {}
+        self._table_sort_column = "key"
+        self._table_sort_reverse = False
 
         self.database_path_var = tk.StringVar(value=str(self.database_path))
         self.output_path_var = tk.StringVar(value=str(self.output_path))
@@ -303,9 +306,7 @@ class TAcroManApp(tk.Tk):
 
         columns = ("command", "key", "details")
         self.tree = ttk.Treeview(parent, columns=columns, show="headings", selectmode="browse")
-        self.tree.heading("command", text=self.t("command"))
-        self.tree.heading("key", text=self.t("key"))
-        self.tree.heading("details", text=self.t("details"))
+        self._update_table_headings()
         self.tree.column("command", width=145, stretch=False)
         self.tree.column("key", width=145, stretch=False)
         self.tree.column("details", width=360, stretch=True)
@@ -445,21 +446,58 @@ class TAcroManApp(tk.Tk):
     def _visible_command_map(self) -> dict[str, dict[str, object]]:
         return command_map(self._active_profile())
 
+    def _table_heading(self, column: str) -> str:
+        labels = {"command": self.t("command"), "key": self.t("key"), "details": self.t("details")}
+        marker = ""
+        if column == self._table_sort_column:
+            marker = " ↑" if not self._table_sort_reverse else " ↓"
+        return f"{labels[column]}{marker}"
+
+    def _update_table_headings(self) -> None:
+        if not hasattr(self, "tree"):
+            return
+        for column in ("command", "key", "details"):
+            self.tree.heading(
+                column,
+                text=self._table_heading(column),
+                command=lambda column=column: self._set_table_sort(column),
+            )
+
+    def _set_table_sort(self, column: str) -> None:
+        """Sort table rows by a clicked heading, like a file browser."""
+        if column not in {"command", "key", "details"}:
+            return
+        if column == self._table_sort_column:
+            self._table_sort_reverse = not self._table_sort_reverse
+        else:
+            self._table_sort_column = column
+            self._table_sort_reverse = False
+        self._update_table_headings()
+        self._refresh_table()
+
     def _filtered_entries(self) -> list[CommandEntry]:
         commands = self._visible_command_map()
         query = self.search_var.get().strip().casefold()
-        ordered = sorted(
-            (entry for entry in self.entries if entry.command_id in commands),
-            key=lambda entry: (entry.command_id.casefold(), self._entry_key(entry, commands[entry.command_id]).casefold()),
+        entries = [entry for entry in self.entries if entry.command_id in commands]
+        if query:
+            entries = [
+                entry
+                for entry in entries
+                if query in entry.command_id.casefold()
+                or any(query in value.casefold() for value in entry.values.values())
+            ]
+        return sorted(
+            entries,
+            key=lambda entry: self._table_sort_key(entry, commands[entry.command_id]),
+            reverse=self._table_sort_reverse,
         )
-        if not query:
-            return ordered
-        return [
-            entry
-            for entry in ordered
-            if query in entry.command_id.casefold()
-            or any(query in value.casefold() for value in entry.values.values())
-        ]
+
+    def _table_sort_key(self, entry: CommandEntry, command: dict[str, object]) -> tuple[str, str, str, str]:
+        command_label = str(command.get("label") or entry.command_id)
+        key = self._entry_key(entry, command)
+        details = self._entry_details(entry, command)
+        primary = {"command": command_label, "key": key, "details": details}[self._table_sort_column]
+        return (primary.casefold(), key.casefold(), command_label.casefold(), entry.uid)
 
     def _entry_key(self, entry: CommandEntry, command: dict[str, object]) -> str:
         comparison_field = next(
@@ -855,20 +893,47 @@ class TAcroManApp(tk.Tk):
         if not command:
             messagebox.showinfo(APP_NAME, self.t("no_usage"))
             return
-        self.clipboard_clear()
-        self.clipboard_append(command)
-        self.update()
+        self._copy_text_to_clipboard(command)
         self.output_status_var.set(self.t("copied_usage", command=command))
+
+    def _copy_text_to_clipboard(self, content: str) -> None:
+        self.clipboard_clear()
+        self.clipboard_append(content)
+        self.update()
+
+    def _copy_preview_output(self, output: str, status_var: tk.StringVar) -> None:
+        self._copy_text_to_clipboard(output)
+        status_var.set(self.t("preview_copied"))
 
     def _preview_output(self) -> None:
         profile = self._active_profile()
+        profile_id = str(profile.get("id", ""))
+        output = render(self.entries, profile)
+        changes = preview_diff(self._last_preview_output_by_profile.get(profile_id), output)
+        self._last_preview_output_by_profile[profile_id] = output
+
         window = tk.Toplevel(self)
         window.title(self.t("preview_title", name=profile["name"]))
         window.geometry("760x520")
         text = ScrolledText(window, wrap="none", font="TkFixedFont")
         text.pack(fill="both", expand=True, padx=10, pady=10)
-        text.insert("1.0", render(self.entries, profile))
+        text.tag_configure("preview_added", foreground="#146c2e", background="#e8f5e9")
+        text.tag_configure("preview_removed", foreground="#aa2020", background="#ffebee")
+        for line in changes:
+            tag = "" if line.change == "unchanged" else f"preview_{line.change}"
+            text.insert("end", line.text, tag)
         text.config(state="disabled")
+
+        actions = ttk.Frame(window, padding=(10, 0, 10, 10))
+        actions.pack(fill="x")
+        copy_status_var = tk.StringVar()
+        ttk.Button(
+            actions,
+            text=self.t("copy_to_clipboard"),
+            command=lambda: self._copy_preview_output(output, copy_status_var),
+        ).pack(side="left")
+        ttk.Label(actions, text=self.t("preview_diff_legend")).pack(side="left", padx=(12, 0))
+        ttk.Label(actions, textvariable=copy_status_var, foreground="#336633").pack(side="right")
 
     def _open_profile_editor(self) -> None:
         if self.profiles:

@@ -116,6 +116,9 @@ _MESSAGES: dict[str, Mapping[str, str]] = {
     "no_usage": {"de": "Der aktive Befehl definiert keinen LaTeX-Aufruf.", "en": "The active command does not define a LaTeX usage command."},
     "copied_usage": {"de": "In die Zwischenablage kopiert: {command}", "en": "Copied to clipboard: {command}"},
     "preview_title": {"de": "Vorschau – {name}", "en": "Preview – {name}"},
+    "copy_to_clipboard": {"de": "In die Zwischenablage kopieren", "en": "Copy to clipboard"},
+    "preview_copied": {"de": "Aktuelle Ausgabe kopiert.", "en": "Current output copied."},
+    "preview_diff_legend": {"de": "Grün: hinzugefügt · Rot: entfernt", "en": "Green: added · Red: removed"},
     "help_text": {
         "de": "TAcroMan speichert unabhängige Befehlseinträge in JSON. Ein Ausgabeprofil definiert die Befehlstypen, ihre Felder, Vorlagen und Vergleichsgruppen.\n\n"
         "Ein Feld mit comparison_group wird technisch auf gleiche Werte geprüft: gleicher Befehlstyp = Fehler, anderer Befehlstyp = Warnung. Es gibt keine fest eingebaute Parent-, Primary- oder Paketlogik.\n\n"
