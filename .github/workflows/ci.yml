@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Pull requests only need to read the repository. Publishing is handled by the
+# separate, manually triggered release workflow.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the project
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+  development-build:
+    # This is deliberately not a GitHub Release. It creates a temporary,
+    # downloadable development build for every successful push to the default branch.
+    name: Windows development build
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: test
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install "pyinstaller>=6,<7"
+
+      - name: Build the Windows app
+        run: >
+          python -m PyInstaller --noconfirm --clean --windowed
+          --name TAcroMan --paths src --collect-data tacroman run.py
+
+      - name: Smoke-test the bundled application
+        shell: pwsh
+        run: |
+          $appDirectory = Join-Path $PWD "dist\TAcroMan"
+          $executable = Join-Path $appDirectory "TAcroMan.exe"
+          if (-not (Test-Path $executable)) {
+            throw "PyInstaller did not create TAcroMan.exe."
+          }
+
+          $profiles = Get-ChildItem -Path $appDirectory -Recurse -File -Filter "profiles.json" |
+            Where-Object { $_.FullName -match '[\\/]tacroman[\\/]defaults[\\/]profiles\.json$' }
+          if (@($profiles).Count -lt 1) {
+            throw "The built application does not contain its bundled profiles.json file."
+          }
+
+          # --help exits before creating the Tk window, so it is safe on a
+          # headless CI runner and still proves that the EXE can start.
+          $process = Start-Process -FilePath $executable -ArgumentList "--help" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "TAcroMan.exe --help exited with code $($process.ExitCode)."
+          }
+
+      - name: Create development ZIP
+        id: package
+        shell: pwsh
+        run: |
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          $archiveName = "TAcroMan-dev-$shortSha-windows.zip"
+          $packageRoot = Join-Path $PWD "package\TAcroMan"
+          New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
+          Copy-Item -Path (Join-Path $PWD "dist\TAcroMan\*") -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path README.md, LICENSE -Destination $packageRoot -Force
+          Compress-Archive -Path $packageRoot -DestinationPath (Join-Path $PWD "package\$archiveName") -Force
+          "archive_name=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload development build
+        uses: actions/upload-artifact@v4
+        with:
+          name: TAcroMan-development-${{ github.sha }}
+          path: package/${{ steps.package.outputs.archive_name }}
+          if-no-files-found: error
+          retention-days: 14

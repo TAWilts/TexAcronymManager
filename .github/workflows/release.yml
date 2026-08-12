@@ -1,0 +1,137 @@
+name: Create Windows release
+
+run-name: Release TAcroMan ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without the leading v (for example 0.3.1)
+        required: true
+        type: string
+      prerelease:
+        description: Mark this as a pre-release
+        default: false
+        required: true
+        type: boolean
+
+# The release job alone receives write access, and only when it is started
+# manually from the default branch.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish Windows release
+    runs-on: windows-latest
+
+    steps:
+      - name: Require the default branch
+        shell: pwsh
+        run: |
+          $defaultBranch = "${{ github.event.repository.default_branch }}"
+          if ($env:GITHUB_REF_NAME -ne $defaultBranch) {
+            throw "Run this workflow from '$defaultBranch', not '$env:GITHUB_REF_NAME'."
+          }
+
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install "pyinstaller>=6,<7"
+
+      - name: Verify the release version
+        shell: pwsh
+        run: |
+          $requestedVersion = "${{ inputs.version }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($requestedVersion) -or $requestedVersion.StartsWith("v")) {
+            throw "Enter a version without a leading v, for example 0.3.1."
+          }
+
+          $projectText = Get-Content -Raw pyproject.toml
+          $projectMatch = [regex]::Match($projectText, '(?m)^version\s*=\s*"([^"]+)"\s*$')
+          if (-not $projectMatch.Success) {
+            throw "Could not read project.version from pyproject.toml."
+          }
+          $projectVersion = $projectMatch.Groups[1].Value
+          $packageVersion = (python -c "from tacroman import __version__; print(__version__)" ).Trim()
+
+          if ($requestedVersion -ne $projectVersion -or $requestedVersion -ne $packageVersion) {
+            throw "Version mismatch: requested=$requestedVersion, pyproject.toml=$projectVersion, tacroman=$packageVersion. Update both project version declarations before releasing."
+          }
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build the Windows app
+        run: >
+          python -m PyInstaller --noconfirm --clean --windowed
+          --name TAcroMan --paths src --collect-data tacroman run.py
+
+      - name: Smoke-test the bundled application
+        shell: pwsh
+        run: |
+          $appDirectory = Join-Path $PWD "dist\TAcroMan"
+          $executable = Join-Path $appDirectory "TAcroMan.exe"
+          if (-not (Test-Path $executable)) {
+            throw "PyInstaller did not create TAcroMan.exe."
+          }
+
+          $profiles = Get-ChildItem -Path $appDirectory -Recurse -File -Filter "profiles.json" |
+            Where-Object { $_.FullName -match '[\\/]tacroman[\\/]defaults[\\/]profiles\.json$' }
+          if (@($profiles).Count -lt 1) {
+            throw "The built application does not contain its bundled profiles.json file."
+          }
+
+          $process = Start-Process -FilePath $executable -ArgumentList "--help" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "TAcroMan.exe --help exited with code $($process.ExitCode)."
+          }
+
+      - name: Create release ZIP
+        id: package
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          $archiveName = "TAcroMan-$version-windows.zip"
+          $packageRoot = Join-Path $PWD "package\TAcroMan"
+          New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
+          Copy-Item -Path (Join-Path $PWD "dist\TAcroMan\*") -Destination $packageRoot -Recurse -Force
+          Copy-Item -Path README.md, LICENSE -Destination $packageRoot -Force
+          Compress-Archive -Path $packageRoot -DestinationPath (Join-Path $PWD "package\$archiveName") -Force
+          "archive_name=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload release build as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TAcroMan-${{ inputs.version }}-windows
+          path: package/${{ steps.package.outputs.archive_name }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = "${{ inputs.version }}"
+          $tag = "v$version"
+          $asset = Join-Path $PWD "package\TAcroMan-$version-windows.zip"
+          $arguments = @(
+            "release", "create", $tag, $asset,
+            "--title", "TAcroMan $version",
+            "--target", $env:GITHUB_SHA,
+            "--generate-notes"
+          )
+          if ("${{ inputs.prerelease }}" -eq "true") {
+            $arguments += "--prerelease"
+          }
+          gh @arguments
