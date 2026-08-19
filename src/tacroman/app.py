@@ -247,6 +247,10 @@ class TAcroManApp(tk.Tk):
         profile_menu.add_command(label=self.t("menu_select_profile_file"), command=self._choose_profiles_file)
         menu.add_cascade(label=self.t("menu_profiles"), menu=profile_menu)
 
+        tools_menu = tk.Menu(menu, tearoff=False)
+        tools_menu.add_command(label=self.t("menu_migrate_citations"), command=lambda: CitationKeyMigrationDialog(self))
+        menu.add_cascade(label=self.t("menu_tools"), menu=tools_menu)
+
         language_menu = tk.Menu(menu, tearoff=False)
         language_menu.add_radiobutton(label="Deutsch", value="de", variable=self.language_var, command=self._request_language_refresh)
         language_menu.add_radiobutton(label="English", value="en", variable=self.language_var, command=self._request_language_refresh)
@@ -962,6 +966,266 @@ class TAcroManApp(tk.Tk):
 
     def _show_about(self) -> None:
         messagebox.showinfo(APP_NAME, self.t("about_text"))
+
+class CitationKeyMigrationDialog(tk.Toplevel):
+    """Compare two BibTeX exports and migrate citation keys in selected TeX files."""
+
+    def __init__(self, app: TAcroManApp) -> None:
+        super().__init__(app)
+        self.app = app
+        self.title(app.t("citation_migration_title"))
+        self.geometry("1020x760")
+        self.minsize(820, 620)
+        self.transient(app)
+
+        self.old_bib_var = tk.StringVar()
+        self.new_bib_var = tk.StringVar()
+        self.backup_var = tk.BooleanVar(value=True)
+        self.status_var = tk.StringVar(value=app.t("citation_migration_ready"))
+        self.tex_files: list[Path] = []
+        self.report = None
+        self._build()
+
+    def _build(self) -> None:
+        frame = ttk.Frame(self, padding=12)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(2, weight=1)
+        frame.rowconfigure(4, weight=2)
+
+        intro = ttk.Label(
+            frame,
+            text=self.app.t("citation_migration_intro"),
+            wraplength=960,
+            justify="left",
+        )
+        intro.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+
+        files = ttk.LabelFrame(frame, text=self.app.t("citation_migration_bib_files"), padding=10)
+        files.grid(row=1, column=0, sticky="ew")
+        files.columnconfigure(1, weight=1)
+        for row, (label_key, variable, title_key) in enumerate(
+            (
+                ("citation_migration_old_bib", self.old_bib_var, "citation_migration_choose_old"),
+                ("citation_migration_new_bib", self.new_bib_var, "citation_migration_choose_new"),
+            )
+        ):
+            ttk.Label(files, text=self.app.t(label_key)).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0 if row == 0 else 7, 0))
+            ttk.Entry(files, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=(0 if row == 0 else 7, 0))
+            ttk.Button(
+                files,
+                text=self.app.t("open"),
+                command=lambda variable=variable, title_key=title_key: self._choose_bib(variable, title_key),
+            ).grid(row=row, column=2, padx=(8, 0), pady=(0 if row == 0 else 7, 0))
+
+        tex_frame = ttk.LabelFrame(frame, text=self.app.t("citation_migration_tex_files"), padding=10)
+        tex_frame.grid(row=2, column=0, sticky="nsew", pady=(10, 0))
+        tex_frame.columnconfigure(0, weight=1)
+        tex_frame.rowconfigure(0, weight=1)
+        self.tex_list = tk.Listbox(tex_frame, selectmode="extended", exportselection=False)
+        self.tex_list.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(tex_frame, orient="vertical", command=self.tex_list.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.tex_list.configure(yscrollcommand=scroll.set)
+        tex_actions = ttk.Frame(tex_frame)
+        tex_actions.grid(row=0, column=2, sticky="ns", padx=(10, 0))
+        ttk.Button(tex_actions, text=self.app.t("citation_migration_add_files"), command=self._add_tex_files).pack(fill="x")
+        ttk.Button(tex_actions, text=self.app.t("citation_migration_add_folder"), command=self._add_tex_folder).pack(fill="x", pady=(6, 0))
+        ttk.Button(tex_actions, text=self.app.t("citation_migration_remove"), command=self._remove_tex_files).pack(fill="x", pady=(6, 0))
+        ttk.Button(tex_actions, text=self.app.t("citation_migration_clear"), command=self._clear_tex_files).pack(fill="x", pady=(6, 0))
+
+        analyse_row = ttk.Frame(frame)
+        analyse_row.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        ttk.Checkbutton(
+            analyse_row,
+            text=self.app.t("citation_migration_backups"),
+            variable=self.backup_var,
+        ).pack(side="left")
+        ttk.Button(analyse_row, text=self.app.t("citation_migration_analyse"), command=self._analyse).pack(side="right")
+
+        result_frame = ttk.LabelFrame(frame, text=self.app.t("citation_migration_preview"), padding=10)
+        result_frame.grid(row=4, column=0, sticky="nsew", pady=(10, 0))
+        result_frame.columnconfigure(0, weight=1)
+        result_frame.rowconfigure(0, weight=1)
+        columns = ("status", "old", "new", "method", "title")
+        self.tree = ttk.Treeview(result_frame, columns=columns, show="headings")
+        self.tree.heading("status", text=self.app.t("citation_migration_status"))
+        self.tree.heading("old", text=self.app.t("citation_migration_old_key"))
+        self.tree.heading("new", text=self.app.t("citation_migration_new_key"))
+        self.tree.heading("method", text=self.app.t("citation_migration_match"))
+        self.tree.heading("title", text=self.app.t("citation_migration_title_column"))
+        self.tree.column("status", width=105, stretch=False)
+        self.tree.column("old", width=180, stretch=False)
+        self.tree.column("new", width=180, stretch=False)
+        self.tree.column("method", width=110, stretch=False)
+        self.tree.column("title", width=360, stretch=True)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        result_scroll = ttk.Scrollbar(result_frame, orient="vertical", command=self.tree.yview)
+        result_scroll.grid(row=0, column=1, sticky="ns")
+        self.tree.configure(yscrollcommand=result_scroll.set)
+
+        footer = ttk.Frame(frame)
+        footer.grid(row=5, column=0, sticky="ew", pady=(10, 0))
+        ttk.Label(footer, textvariable=self.status_var, wraplength=700, justify="left").pack(side="left", fill="x", expand=True)
+        self.apply_button = ttk.Button(footer, text=self.app.t("citation_migration_apply"), command=self._apply, state="disabled")
+        self.apply_button.pack(side="right")
+        ttk.Button(footer, text=self.app.t("close"), command=self.destroy).pack(side="right", padx=(0, 8))
+
+    def _choose_bib(self, variable: tk.StringVar, title_key: str) -> None:
+        selected = filedialog.askopenfilename(
+            parent=self,
+            title=self.app.t(title_key),
+            filetypes=[(self.app.t("bib_files"), "*.bib"), (self.app.t("all_files"), "*.*")],
+        )
+        if selected:
+            variable.set(selected)
+            self._invalidate_report()
+
+    def _add_tex_files(self) -> None:
+        selected = filedialog.askopenfilenames(
+            parent=self,
+            title=self.app.t("citation_migration_choose_tex"),
+            filetypes=[(self.app.t("tex_files"), "*.tex"), (self.app.t("all_files"), "*.*")],
+        )
+        self._add_paths(Path(path) for path in selected)
+
+    def _add_tex_folder(self) -> None:
+        selected = filedialog.askdirectory(parent=self, title=self.app.t("citation_migration_choose_folder"))
+        if not selected:
+            return
+        self._add_paths(sorted(Path(selected).rglob("*.tex")))
+
+    def _add_paths(self, paths: object) -> None:
+        existing = {path.resolve() for path in self.tex_files}
+        for raw_path in paths:
+            path = Path(raw_path).expanduser().resolve()
+            if path.is_file() and path.suffix.casefold() == ".tex" and path not in existing:
+                self.tex_files.append(path)
+                existing.add(path)
+        self.tex_files.sort(key=lambda path: str(path).casefold())
+        self._refresh_tex_list()
+
+    def _refresh_tex_list(self) -> None:
+        self.tex_list.delete(0, "end")
+        for path in self.tex_files:
+            self.tex_list.insert("end", str(path))
+
+    def _remove_tex_files(self) -> None:
+        selected = set(self.tex_list.curselection())
+        if not selected:
+            return
+        self.tex_files = [path for index, path in enumerate(self.tex_files) if index not in selected]
+        self._refresh_tex_list()
+
+    def _clear_tex_files(self) -> None:
+        self.tex_files.clear()
+        self._refresh_tex_list()
+
+    def _invalidate_report(self) -> None:
+        self.report = None
+        if hasattr(self, "apply_button"):
+            self.apply_button.config(state="disabled")
+
+    def _analyse(self) -> None:
+        from .bib_migration import build_key_migration
+
+        old_path = Path(self.old_bib_var.get()).expanduser()
+        new_path = Path(self.new_bib_var.get()).expanduser()
+        if not old_path.is_file() or not new_path.is_file():
+            messagebox.showerror(APP_NAME, self.app.t("citation_migration_missing_bib"), parent=self)
+            return
+
+        try:
+            report = build_key_migration(
+                old_path.read_text(encoding="utf-8-sig"),
+                new_path.read_text(encoding="utf-8-sig"),
+            )
+        except (OSError, UnicodeError, ValueError) as error:
+            messagebox.showerror(APP_NAME, self.app.t("citation_migration_analysis_failed", error=error), parent=self)
+            return
+
+        self.report = report
+        self.tree.delete(*self.tree.get_children())
+        order = {"matched": 0, "ambiguous": 1, "unmatched": 2, "unchanged": 3}
+        for item in sorted(report.matches, key=lambda match: (order.get(match.status, 9), match.old_key.casefold())):
+            new_value = item.new_key or (", ".join(item.candidates) if item.candidates else "")
+            self.tree.insert(
+                "",
+                "end",
+                values=(
+                    self._status_label(item.status),
+                    item.old_key,
+                    new_value,
+                    self._method_label(item.method),
+                    item.title,
+                ),
+            )
+
+        self.status_var.set(
+            self.app.t(
+                "citation_migration_summary",
+                changed=report.changed_count,
+                unchanged=report.unchanged_count,
+                ambiguous=report.ambiguous_count,
+                unmatched=report.unmatched_count,
+            )
+        )
+        self.apply_button.config(state="normal" if report.mapping else "disabled")
+
+    def _status_label(self, status: str) -> str:
+        return self.app.t(
+            {
+                "matched": "citation_migration_status_matched",
+                "unchanged": "citation_migration_status_unchanged",
+                "ambiguous": "citation_migration_status_ambiguous",
+                "unmatched": "citation_migration_status_unmatched",
+            }.get(status, "citation_migration_status_unmatched")
+        )
+
+    def _method_label(self, method: str) -> str:
+        if not method:
+            return ""
+        return {
+            "same-key": self.app.t("citation_migration_method_same"),
+            "ids": "ids",
+            "doi": "DOI",
+            "title-year": self.app.t("citation_migration_method_title_year"),
+            "title": self.app.t("citation_migration_method_title"),
+        }.get(method, method)
+
+    def _apply(self) -> None:
+        from .bib_migration import migrate_tex_files
+
+        if self.report is None or not self.report.mapping:
+            return
+        if not self.tex_files:
+            messagebox.showerror(APP_NAME, self.app.t("citation_migration_no_tex"), parent=self)
+            return
+        if not messagebox.askyesno(
+            APP_NAME,
+            self.app.t(
+                "citation_migration_confirm",
+                keys=len(self.report.mapping),
+                files=len(self.tex_files),
+            ),
+            parent=self,
+        ):
+            return
+
+        try:
+            result = migrate_tex_files(self.tex_files, self.report.mapping, backup=self.backup_var.get())
+        except (OSError, UnicodeError) as error:
+            messagebox.showerror(APP_NAME, self.app.t("citation_migration_apply_failed", error=error), parent=self)
+            return
+
+        message = self.app.t(
+            "citation_migration_done",
+            replacements=result.replacements,
+            changed=result.files_changed,
+            total=result.files_considered,
+        )
+        self.status_var.set(message)
+        messagebox.showinfo(APP_NAME, message, parent=self)
 
 
 class ProfileEditor(tk.Toplevel):
