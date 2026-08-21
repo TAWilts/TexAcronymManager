@@ -105,8 +105,10 @@ class ReferenceAuditTests(unittest.TestCase):
         class App:
             output_path_var = Variable()
 
-        self.assertEqual(Path(_initial_project_directory(App())), Path("/tmp/dissertation"))
-
+        self.assertEqual(
+            Path(_initial_project_directory(App())),
+            Path("/tmp/dissertation").resolve(),
+)
     def test_reference_audit_search_matches_terms_across_any_columns(self) -> None:
         row = ("chapter/navigation.tex", 42, "smithSLAM2024", "Underwater SLAM", "Jane Smith", "sonar excerpt")
         self.assertTrue(_row_matches_search(row, "slam sonar"))
