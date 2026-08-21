@@ -24,6 +24,7 @@ from .model import (
 )
 from .profiles import load_profiles, normalise_profile, save_profiles
 from .rendering import preview_diff, profile_template_warnings, render, usage_for
+from .reference_audit_dialog import ReferenceAuditDialog
 from .storage import atomic_write_text, load_database, load_settings, save_database, save_settings
 
 
@@ -249,6 +250,7 @@ class TAcroManApp(tk.Tk):
 
         tools_menu = tk.Menu(menu, tearoff=False)
         tools_menu.add_command(label=self.t("menu_migrate_citations"), command=lambda: CitationKeyMigrationDialog(self))
+        tools_menu.add_command(label=self.t("menu_reference_audit"), command=lambda: ReferenceAuditDialog(self))
         menu.add_cascade(label=self.t("menu_tools"), menu=tools_menu)
 
         language_menu = tk.Menu(menu, tearoff=False)
@@ -970,12 +972,14 @@ class TAcroManApp(tk.Tk):
 class CitationKeyMigrationDialog(tk.Toplevel):
     """Compare two BibTeX exports and migrate citation keys in selected TeX files."""
 
+    _EDITABLE_COLUMNS = {"old", "new", "method", "title"}
+
     def __init__(self, app: TAcroManApp) -> None:
         super().__init__(app)
         self.app = app
         self.title(app.t("citation_migration_title"))
-        self.geometry("1020x760")
-        self.minsize(820, 620)
+        self.geometry("1120x780")
+        self.minsize(900, 640)
         self.transient(app)
 
         self.old_bib_var = tk.StringVar()
@@ -984,6 +988,8 @@ class CitationKeyMigrationDialog(tk.Toplevel):
         self.status_var = tk.StringVar(value=app.t("citation_migration_ready"))
         self.tex_files: list[Path] = []
         self.report = None
+        self.preview_rows: dict[str, dict[str, Any]] = {}
+        self._cell_editor: tk.Widget | None = None
         self._build()
 
     def _build(self) -> None:
@@ -996,7 +1002,7 @@ class CitationKeyMigrationDialog(tk.Toplevel):
         intro = ttk.Label(
             frame,
             text=self.app.t("citation_migration_intro"),
-            wraplength=960,
+            wraplength=1040,
             justify="left",
         )
         intro.grid(row=0, column=0, sticky="ew", pady=(0, 10))
@@ -1047,26 +1053,56 @@ class CitationKeyMigrationDialog(tk.Toplevel):
         result_frame.grid(row=4, column=0, sticky="nsew", pady=(10, 0))
         result_frame.columnconfigure(0, weight=1)
         result_frame.rowconfigure(0, weight=1)
-        columns = ("status", "old", "new", "method", "title")
-        self.tree = ttk.Treeview(result_frame, columns=columns, show="headings")
+        columns = ("use", "status", "old", "new", "method", "title")
+        self.tree = ttk.Treeview(result_frame, columns=columns, show="headings", selectmode="extended")
+        self.tree.heading("use", text=self.app.t("citation_migration_use"))
         self.tree.heading("status", text=self.app.t("citation_migration_status"))
         self.tree.heading("old", text=self.app.t("citation_migration_old_key"))
         self.tree.heading("new", text=self.app.t("citation_migration_new_key"))
         self.tree.heading("method", text=self.app.t("citation_migration_match"))
         self.tree.heading("title", text=self.app.t("citation_migration_title_column"))
+        self.tree.column("use", width=72, anchor="center", stretch=False)
         self.tree.column("status", width=105, stretch=False)
-        self.tree.column("old", width=180, stretch=False)
-        self.tree.column("new", width=180, stretch=False)
-        self.tree.column("method", width=110, stretch=False)
-        self.tree.column("title", width=360, stretch=True)
+        self.tree.column("old", width=175, stretch=False)
+        self.tree.column("new", width=205, stretch=False)
+        self.tree.column("method", width=115, stretch=False)
+        self.tree.column("title", width=350, stretch=True)
         self.tree.grid(row=0, column=0, sticky="nsew")
         result_scroll = ttk.Scrollbar(result_frame, orient="vertical", command=self.tree.yview)
         result_scroll.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=result_scroll.set)
+        self.tree.bind("<<TreeviewSelect>>", lambda _event: self._update_remove_button())
+        self.tree.bind("<Double-1>", self._on_tree_double_click, add=True)
+        self.tree.bind("<space>", self._on_tree_space, add=True)
+
+        result_actions = ttk.Frame(result_frame)
+        result_actions.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        self.add_mapping_button = ttk.Button(
+            result_actions,
+            text=self.app.t("citation_migration_add_mapping"),
+            command=self._add_manual_mapping,
+            state="disabled",
+        )
+        self.add_mapping_button.pack(side="left")
+        self.toggle_mapping_button = ttk.Button(
+            result_actions,
+            text=self.app.t("citation_migration_toggle_mapping"),
+            command=self._toggle_selected_preview_rows,
+            state="disabled",
+        )
+        self.toggle_mapping_button.pack(side="left", padx=(8, 0))
+        self.remove_mapping_button = ttk.Button(
+            result_actions,
+            text=self.app.t("citation_migration_remove_mapping"),
+            command=self._remove_preview_rows,
+            state="disabled",
+        )
+        self.remove_mapping_button.pack(side="left", padx=(8, 0))
+        ttk.Label(result_actions, text=self.app.t("citation_migration_edit_hint")).pack(side="right")
 
         footer = ttk.Frame(frame)
         footer.grid(row=5, column=0, sticky="ew", pady=(10, 0))
-        ttk.Label(footer, textvariable=self.status_var, wraplength=700, justify="left").pack(side="left", fill="x", expand=True)
+        ttk.Label(footer, textvariable=self.status_var, wraplength=760, justify="left").pack(side="left", fill="x", expand=True)
         self.apply_button = ttk.Button(footer, text=self.app.t("citation_migration_apply"), command=self._apply, state="disabled")
         self.apply_button.pack(side="right")
         ttk.Button(footer, text=self.app.t("close"), command=self.destroy).pack(side="right", padx=(0, 8))
@@ -1122,9 +1158,19 @@ class CitationKeyMigrationDialog(tk.Toplevel):
         self._refresh_tex_list()
 
     def _invalidate_report(self) -> None:
+        self._destroy_cell_editor()
         self.report = None
+        self.preview_rows.clear()
+        if hasattr(self, "tree"):
+            self.tree.delete(*self.tree.get_children())
         if hasattr(self, "apply_button"):
             self.apply_button.config(state="disabled")
+        if hasattr(self, "add_mapping_button"):
+            self.add_mapping_button.config(state="disabled")
+        if hasattr(self, "toggle_mapping_button"):
+            self.toggle_mapping_button.config(state="disabled")
+        if hasattr(self, "remove_mapping_button"):
+            self.remove_mapping_button.config(state="disabled")
 
     def _analyse(self) -> None:
         from .bib_migration import build_key_migration
@@ -1144,33 +1190,59 @@ class CitationKeyMigrationDialog(tk.Toplevel):
             messagebox.showerror(APP_NAME, self.app.t("citation_migration_analysis_failed", error=error), parent=self)
             return
 
+        self._destroy_cell_editor()
         self.report = report
+        self.preview_rows.clear()
         self.tree.delete(*self.tree.get_children())
         order = {"matched": 0, "ambiguous": 1, "unmatched": 2, "unchanged": 3}
         for item in sorted(report.matches, key=lambda match: (order.get(match.status, 9), match.old_key.casefold())):
-            new_value = item.new_key or (", ".join(item.candidates) if item.candidates else "")
-            self.tree.insert(
-                "",
-                "end",
-                values=(
-                    self._status_label(item.status),
-                    item.old_key,
-                    new_value,
-                    self._method_label(item.method),
-                    item.title,
-                ),
+            self._insert_preview_row(
+                selected=item.changes_key,
+                status=item.status,
+                old_key=item.old_key,
+                new_key=item.new_key,
+                method=item.method,
+                title=item.title,
             )
 
-        self.status_var.set(
-            self.app.t(
-                "citation_migration_summary",
-                changed=report.changed_count,
-                unchanged=report.unchanged_count,
-                ambiguous=report.ambiguous_count,
-                unmatched=report.unmatched_count,
-            )
+        self.add_mapping_button.config(state="normal")
+        self._update_preview_state(use_analysis_summary=True)
+
+    def _insert_preview_row(
+        self,
+        *,
+        selected: bool,
+        status: str,
+        old_key: str,
+        new_key: str | None,
+        method: str,
+        title: str,
+    ) -> str:
+        iid = self.tree.insert("", "end")
+        self.preview_rows[iid] = {
+            "selected": bool(selected),
+            "status": status,
+            "old_key": old_key,
+            "new_key": new_key or "",
+            "method": method,
+            "title": title,
+        }
+        self._refresh_preview_row(iid)
+        return iid
+
+    def _refresh_preview_row(self, iid: str) -> None:
+        row = self.preview_rows[iid]
+        self.tree.item(
+            iid,
+            values=(
+                "☑" if row["selected"] else "☐",
+                self._status_label(row["status"]),
+                row["old_key"],
+                row["new_key"],
+                self._method_label(row["method"]),
+                row["title"],
+            ),
         )
-        self.apply_button.config(state="normal" if report.mapping else "disabled")
 
     def _status_label(self, status: str) -> str:
         return self.app.t(
@@ -1179,6 +1251,7 @@ class CitationKeyMigrationDialog(tk.Toplevel):
                 "unchanged": "citation_migration_status_unchanged",
                 "ambiguous": "citation_migration_status_ambiguous",
                 "unmatched": "citation_migration_status_unmatched",
+                "manual": "citation_migration_status_manual",
             }.get(status, "citation_migration_status_unmatched")
         )
 
@@ -1191,12 +1264,210 @@ class CitationKeyMigrationDialog(tk.Toplevel):
             "doi": "DOI",
             "title-year": self.app.t("citation_migration_method_title_year"),
             "title": self.app.t("citation_migration_method_title"),
+            "manual": self.app.t("citation_migration_method_manual"),
         }.get(method, method)
+
+    def _toggle_selected_preview_rows(self) -> None:
+        """Toggle the apply-state for the currently selected preview row(s)."""
+        self._destroy_cell_editor()
+        selected = tuple(self.tree.selection())
+        if not selected:
+            focused = self.tree.focus()
+            selected = (focused,) if focused else ()
+        for iid in selected:
+            if iid in self.preview_rows:
+                self._toggle_preview_row(iid)
+        self._update_remove_button()
+
+    def _on_tree_space(self, _event: tk.Event) -> str:
+        selected = tuple(self.tree.selection())
+        if not selected:
+            focused = self.tree.focus()
+            selected = (focused,) if focused else ()
+        for iid in selected:
+            if iid in self.preview_rows:
+                self._toggle_preview_row(iid)
+        return "break"
+
+    def _on_tree_double_click(self, event: tk.Event) -> None:
+        if self.tree.identify_region(event.x, event.y) != "cell":
+            return
+        iid = self.tree.identify_row(event.y)
+        column_number = self.tree.identify_column(event.x)
+        column_map = {"#3": "old", "#4": "new", "#5": "method", "#6": "title"}
+        column = column_map.get(column_number)
+        if iid and column in self._EDITABLE_COLUMNS:
+            self._begin_cell_edit(iid, column)
+
+    def _toggle_preview_row(self, iid: str) -> None:
+        row = self.preview_rows[iid]
+        if row["selected"]:
+            row["selected"] = False
+        else:
+            old_key = row["old_key"].strip()
+            new_key = row["new_key"].strip()
+            if not old_key or not new_key:
+                self.status_var.set(self.app.t("citation_migration_manual_incomplete"))
+                return
+            if old_key == new_key:
+                self.status_var.set(self.app.t("citation_migration_same_manual_key"))
+                return
+            row["selected"] = True
+        self._refresh_preview_row(iid)
+        self._update_preview_state()
+
+    def _begin_cell_edit(self, iid: str, column: str) -> None:
+        self._destroy_cell_editor()
+        bbox = self.tree.bbox(iid, column)
+        if not bbox:
+            return
+        x, y, width, height = bbox
+        row = self.preview_rows[iid]
+
+        editor = ttk.Entry(self.tree)
+        field_map = {"old": "old_key", "new": "new_key", "method": "method", "title": "title"}
+        value = row[field_map[column]]
+        initial = self._method_label(value) if column == "method" else value
+
+        editor.place(x=x, y=y, width=width, height=height)
+        editor.delete(0, "end")
+        editor.insert(0, initial)
+        editor.selection_range(0, "end")
+        editor.focus_set()
+        self._cell_editor = editor
+
+        def commit(_event: tk.Event | None = None) -> None:
+            if self._cell_editor is not editor:
+                return
+            value = editor.get().strip()
+            self._commit_cell_edit(iid, column, value)
+
+        def cancel(_event: tk.Event | None = None) -> None:
+            if self._cell_editor is editor:
+                self._destroy_cell_editor()
+
+        editor.bind("<Return>", commit)
+        editor.bind("<Escape>", cancel)
+        editor.bind("<FocusOut>", commit)
+
+    def _commit_cell_edit(self, iid: str, column: str, value: str) -> None:
+        self._destroy_cell_editor()
+        if iid not in self.preview_rows:
+            return
+        row = self.preview_rows[iid]
+        if column == "old":
+            row["old_key"] = value
+            row["status"] = "manual"
+            row["method"] = "manual"
+        elif column == "new":
+            row["new_key"] = value
+            row["status"] = "manual"
+            row["method"] = "manual"
+        elif column == "method":
+            row["method"] = value
+        elif column == "title":
+            row["title"] = value
+
+        if not row["old_key"].strip() or not row["new_key"].strip() or row["old_key"].strip() == row["new_key"].strip():
+            row["selected"] = False
+        self._refresh_preview_row(iid)
+        self._update_preview_state()
+
+    def _destroy_cell_editor(self) -> None:
+        editor = self._cell_editor
+        self._cell_editor = None
+        if editor is not None:
+            try:
+                editor.destroy()
+            except tk.TclError:
+                pass
+
+    def _add_manual_mapping(self) -> None:
+        iid = self._insert_preview_row(
+            selected=False,
+            status="manual",
+            old_key="",
+            new_key="",
+            method="manual",
+            title="",
+        )
+        self.tree.selection_set(iid)
+        self.tree.focus(iid)
+        self.tree.see(iid)
+        self._update_remove_button()
+        self._begin_cell_edit(iid, "old")
+
+    def _remove_preview_rows(self) -> None:
+        self._destroy_cell_editor()
+        selected = tuple(self.tree.selection())
+        for iid in selected:
+            self.preview_rows.pop(iid, None)
+            if self.tree.exists(iid):
+                self.tree.delete(iid)
+        self._update_preview_state()
+
+    def _update_remove_button(self) -> None:
+        has_selection = bool(self.tree.selection())
+        self.remove_mapping_button.config(state="normal" if has_selection else "disabled")
+        self.toggle_mapping_button.config(state="normal" if has_selection else "disabled")
+
+    def _selected_mapping(self, *, show_errors: bool = False) -> dict[str, str] | None:
+        mapping: dict[str, str] = {}
+        for row in self.preview_rows.values():
+            if not row["selected"]:
+                continue
+            old_key = row["old_key"].strip()
+            new_key = row["new_key"].strip()
+            if not old_key or not new_key or old_key == new_key:
+                continue
+            existing = mapping.get(old_key)
+            if existing is not None and existing != new_key:
+                if show_errors:
+                    messagebox.showerror(
+                        APP_NAME,
+                        self.app.t(
+                            "citation_migration_conflicting_manual",
+                            old=old_key,
+                            first=existing,
+                            second=new_key,
+                        ),
+                        parent=self,
+                    )
+                return None
+            mapping[old_key] = new_key
+        return mapping
+
+    def _update_preview_state(self, *, use_analysis_summary: bool = False) -> None:
+        mapping = self._selected_mapping()
+        selected_count = len(mapping or {})
+        self.apply_button.config(state="normal" if mapping else "disabled")
+        self._update_remove_button()
+
+        if use_analysis_summary and self.report is not None:
+            self.status_var.set(
+                self.app.t(
+                    "citation_migration_summary",
+                    changed=self.report.changed_count,
+                    unchanged=self.report.unchanged_count,
+                    ambiguous=self.report.ambiguous_count,
+                    unmatched=self.report.unmatched_count,
+                    selected=selected_count,
+                )
+            )
+        else:
+            self.status_var.set(
+                self.app.t(
+                    "citation_migration_selection_summary",
+                    selected=selected_count,
+                    total=len(self.preview_rows),
+                )
+            )
 
     def _apply(self) -> None:
         from .bib_migration import migrate_tex_files
 
-        if self.report is None or not self.report.mapping:
+        mapping = self._selected_mapping(show_errors=True)
+        if not mapping:
             return
         if not self.tex_files:
             messagebox.showerror(APP_NAME, self.app.t("citation_migration_no_tex"), parent=self)
@@ -1205,7 +1476,7 @@ class CitationKeyMigrationDialog(tk.Toplevel):
             APP_NAME,
             self.app.t(
                 "citation_migration_confirm",
-                keys=len(self.report.mapping),
+                keys=len(mapping),
                 files=len(self.tex_files),
             ),
             parent=self,
@@ -1213,7 +1484,7 @@ class CitationKeyMigrationDialog(tk.Toplevel):
             return
 
         try:
-            result = migrate_tex_files(self.tex_files, self.report.mapping, backup=self.backup_var.get())
+            result = migrate_tex_files(self.tex_files, mapping, backup=self.backup_var.get())
         except (OSError, UnicodeError) as error:
             messagebox.showerror(APP_NAME, self.app.t("citation_migration_apply_failed", error=error), parent=self)
             return
