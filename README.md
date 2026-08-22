@@ -227,3 +227,22 @@ src/tacroman/
   rendering.py    Profile-based output generation
   storage.py      Atomic JSON and text persistence
 ~~~
+
+## Visual Studio Code extension
+
+The repository also contains an experimental editor integration in
+`vscode-extension/`. It is a separate TypeScript package but deliberately lives
+in the same Git repository as the Python desktop application, so releases and
+schema changes can be maintained together.
+
+The extension reads the same `acronyms.json` database and provides:
+
+- completion inside LaTeX acronym commands such as `\ac{...}` and `\acp{...}`;
+- lookup by short form and long form;
+- lightweight diagnostics for known acronyms written as plain text;
+- Quick Fixes such as `AUV` -> `\ac{AUV}` and `AUVs` -> `\acp{AUV}`;
+- commands for database selection/reload and launching TAcroMan.
+
+It runs alongside LaTeX Workshop and does not patch or depend on LaTeX
+Workshop internals. For development and packaging instructions, see
+`vscode-extension/README.md`.

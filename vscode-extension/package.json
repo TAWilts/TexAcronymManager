@@ -1,0 +1,161 @@
+{
+  "name": "tacroman-vscode",
+  "displayName": "TAcroMan",
+  "description": "TAcroMan acronym completions, diagnostics, and Quick Fixes for LaTeX in Visual Studio Code.",
+  "version": "0.2.1",
+  "publisher": "tawilts",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "latex",
+    "acronym",
+    "tacroman",
+    "latex-workshop"
+  ],
+  "activationEvents": [
+    "onLanguage:latex",
+    "onCommand:tacroman.selectDatabase",
+    "onCommand:tacroman.open",
+    "onCommand:tacroman.reload"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "tacroman.selectDatabase",
+        "title": "TAcroMan: Select Database"
+      },
+      {
+        "command": "tacroman.open",
+        "title": "TAcroMan: Open TAcroMan"
+      },
+      {
+        "command": "tacroman.reload",
+        "title": "TAcroMan: Reload Database"
+      }
+    ],
+    "configuration": {
+      "title": "TAcroMan",
+      "properties": {
+        "tacroman.databasePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to the TAcroMan JSON database. Relative paths are resolved from the workspace folder. Leave empty for automatic discovery of acronyms.json files."
+        },
+        "tacroman.latexCommands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "ac",
+            "acp",
+            "acs",
+            "acsp",
+            "acl",
+            "aclp",
+            "acf",
+            "acfp",
+            "Ac",
+            "Acp"
+          ],
+          "description": "LaTeX commands for which TAcroMan should offer completion inside the first braced argument. Enter command names without the leading backslash."
+        },
+        "tacroman.executablePath": {
+          "type": "string",
+          "default": "tacroman",
+          "description": "Executable used by 'TAcroMan: Open TAcroMan'. This can be tacroman from PATH or an absolute path to a TAcroMan executable."
+        },
+        "tacroman.launchArguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional arguments passed when TAcroMan is launched from VS Code."
+        },
+        "tacroman.maxCompletionItems": {
+          "type": "integer",
+          "default": 250,
+          "minimum": 10,
+          "maximum": 5000,
+          "description": "Maximum number of acronym completion items returned at once."
+        },
+        "tacroman.plainTextCompletion": {
+          "type": "boolean",
+          "default": true,
+          "description": "Offer acronym completions while typing known short or long forms directly in LaTeX prose."
+        },
+        "tacroman.plainTextDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Detect known acronyms written as plain text in LaTeX documents and offer Quick Fixes."
+        },
+        "tacroman.quickFixSingularCommand": {
+          "type": "string",
+          "default": "ac",
+          "description": "LaTeX command used by the Quick Fix for singular plain-text acronyms (without the leading backslash)."
+        },
+        "tacroman.quickFixPluralCommand": {
+          "type": "string",
+          "default": "acp",
+          "description": "LaTeX command used by the Quick Fix for plural plain-text acronyms (without the leading backslash)."
+        },
+        "tacroman.inferPlainTextPlurals": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also recognize a simple short-form plural by appending s when the TAcroMan database has no explicit short_plural value."
+        },
+        "tacroman.ignoredArgumentCommands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "ac",
+            "acp",
+            "acs",
+            "acsp",
+            "acl",
+            "aclp",
+            "acf",
+            "acfp",
+            "Ac",
+            "Acp",
+            "cite",
+            "citep",
+            "citet",
+            "ref",
+            "eqref",
+            "pageref",
+            "label",
+            "url",
+            "path",
+            "input",
+            "include",
+            "bibliography",
+            "bibliographystyle"
+          ],
+          "description": "LaTeX commands whose first braced argument should be ignored by plain-text acronym detection. Enter names without the leading backslash."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test out/test/*.test.js",
+    "package": "npx @vscode/vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.95.0",
+    "typescript": "^5.8.3"
+  }
+}
