@@ -26,6 +26,7 @@ from .profiles import load_profiles, normalise_profile, save_profiles
 from .rendering import preview_diff, profile_template_warnings, render, usage_for
 from .reference_audit_dialog import ReferenceAuditDialog
 from .storage import atomic_write_text, load_database, load_settings, save_database, save_settings
+from .vscode_integration import write_vscode_integration_state
 
 
 APP_NAME = "TAcroMan"
@@ -168,6 +169,18 @@ class TAcroManApp(tk.Tk):
         self._table_sort_reverse = False
 
         self.database_path_var = tk.StringVar(value=str(self.database_path))
+
+        # Publish the active database for editor integrations.
+
+        self.database_path_var.trace_add(
+
+            "write",
+
+            lambda *_args: write_vscode_integration_state(self.database_path_var.get()),
+
+        )
+
+        write_vscode_integration_state(self.database_path_var.get())
         self.output_path_var = tk.StringVar(value=str(self.output_path))
         self.search_var = tk.StringVar()
         self.profile_var = tk.StringVar(value=str(settings.get("selected_profile_id", "acronym-package")))

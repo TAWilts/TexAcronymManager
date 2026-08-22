@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { AcronymCandidate, candidatesFromDatabase } from "./database";
+import { readDesktopDatabasePath } from "./desktopIntegration";
 
 interface CachedDatabase {
   uri: vscode.Uri;
@@ -71,7 +72,13 @@ export class DatabaseManager implements vscode.Disposable {
 
     this.selectedDatabase = picked.uri;
     this.cache = undefined;
-    await this.context.workspaceState.update("tacroman.selectedDatabase", picked.uri.toString());
+    const target = vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await vscode.workspace
+      .getConfiguration("tacroman")
+      .update("databasePath", picked.uri.fsPath, target);
+    await this.context.workspaceState.update("tacroman.selectedDatabase", undefined);
     this.databaseChangedEmitter.fire();
     vscode.window.setStatusBarMessage(`TAcroMan: ${vscode.workspace.asRelativePath(picked.uri, false)}`, 4000);
     return picked.uri;
@@ -81,6 +88,19 @@ export class DatabaseManager implements vscode.Disposable {
     const configured = this.configuredDatabaseUri(activeDocument);
     if (configured) {
       return configured;
+    }
+
+    // Default to the database currently selected in desktop TAcroMan.
+    // An explicit VS Code tacroman.databasePath configuration still wins.
+    const desktopPath = await readDesktopDatabasePath();
+    if (desktopPath) {
+      const desktopUri = vscode.Uri.file(desktopPath);
+      try {
+        await vscode.workspace.fs.stat(desktopUri);
+        return desktopUri;
+      } catch {
+        // Stale desktop state: continue with the existing fallbacks.
+      }
     }
 
     if (this.selectedDatabase) {
