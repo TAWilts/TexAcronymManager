@@ -1,5 +1,17 @@
 # Change Log
 
+## 0.3.1
+
+- Fix the Secondary Side Bar view-container identifier so VS Code accepts the
+  TAcroMan container instead of falling back to Explorer.
+
+## 0.3.0
+
+- Add a native TAcroMan acronym browser in VS Code's Secondary Side Bar.
+- Show the active database path and all loaded acronym short/long forms.
+- Add acronym filtering, automatic sidebar refresh, and database/open/reload actions.
+- Add context actions to insert `\ac{...}` or `\acp{...}` from the acronym list.
+
 ## 0.2.1
 
 - Offer completion directly in normal LaTeX prose.

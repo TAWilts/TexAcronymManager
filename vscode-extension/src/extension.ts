@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { findCompletionContext } from "./context";
 import { matchesQuery } from "./database";
 import { DatabaseManager } from "./databaseManager";
+import { registerTAcroManSidebar } from "./sidebar";
 import {
   buildPlainAcronymCompletionForms,
   buildPlainAcronymForms,
@@ -367,6 +368,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const databases = new DatabaseManager(context);
   const diagnostics = new PlainAcronymDiagnostics(databases);
   context.subscriptions.push(databases, diagnostics);
+  registerTAcroManSidebar(context, databases);
 
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(

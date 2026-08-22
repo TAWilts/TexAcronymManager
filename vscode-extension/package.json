@@ -2,11 +2,11 @@
   "name": "tacroman-vscode",
   "displayName": "TAcroMan",
   "description": "TAcroMan acronym completions, diagnostics, and Quick Fixes for LaTeX in Visual Studio Code.",
-  "version": "0.2.2",
+  "version": "0.3.1",
   "publisher": "tawilts",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.106.0"
   },
   "categories": [
     "Programming Languages",
@@ -22,22 +22,49 @@
     "onLanguage:latex",
     "onCommand:tacroman.selectDatabase",
     "onCommand:tacroman.open",
-    "onCommand:tacroman.reload"
+    "onCommand:tacroman.reload",
+    "onView:tacroman.acronymExplorer",
+    "onCommand:tacroman.sidebar.search",
+    "onCommand:tacroman.sidebar.clearFilter",
+    "onCommand:tacroman.insertAcronym",
+    "onCommand:tacroman.insertAcronymPlural"
   ],
   "main": "./out/src/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "tacroman.selectDatabase",
-        "title": "TAcroMan: Select Database"
+        "title": "TAcroMan: Select Database",
+        "icon": "$(folder-opened)"
       },
       {
         "command": "tacroman.open",
-        "title": "TAcroMan: Open TAcroMan"
+        "title": "TAcroMan: Open TAcroMan",
+        "icon": "$(link-external)"
       },
       {
         "command": "tacroman.reload",
-        "title": "TAcroMan: Reload Database"
+        "title": "TAcroMan: Reload Database",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "tacroman.sidebar.search",
+        "title": "TAcroMan: Filter Acronyms",
+        "icon": "$(search)"
+      },
+      {
+        "command": "tacroman.sidebar.clearFilter",
+        "title": "TAcroMan: Clear Acronym Filter",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "tacroman.insertAcronym",
+        "title": "TAcroMan: Insert \\ac{...}",
+        "icon": "$(symbol-key)"
+      },
+      {
+        "command": "tacroman.insertAcronymPlural",
+        "title": "TAcroMan: Insert \\acp{...}"
       }
     ],
     "configuration": {
@@ -145,6 +172,64 @@
           "description": "LaTeX commands whose first braced argument should be ignored by plain-text acronym detection. Enter names without the leading backslash."
         }
       }
+    },
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "tacroman-sidebar",
+          "title": "TAcroMan",
+          "icon": "$(symbol-key)"
+        }
+      ]
+    },
+    "views": {
+      "tacroman-sidebar": [
+        {
+          "id": "tacroman.acronymExplorer",
+          "name": "Acronyms"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "tacroman.sidebar.search",
+          "when": "view == tacroman.acronymExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "tacroman.sidebar.clearFilter",
+          "when": "view == tacroman.acronymExplorer && tacroman.sidebar.filterActive",
+          "group": "navigation@2"
+        },
+        {
+          "command": "tacroman.reload",
+          "when": "view == tacroman.acronymExplorer",
+          "group": "navigation@3"
+        },
+        {
+          "command": "tacroman.selectDatabase",
+          "when": "view == tacroman.acronymExplorer",
+          "group": "tacroman@1"
+        },
+        {
+          "command": "tacroman.open",
+          "when": "view == tacroman.acronymExplorer",
+          "group": "tacroman@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "tacroman.insertAcronym",
+          "when": "view == tacroman.acronymExplorer && viewItem == tacroman.acronym",
+          "group": "navigation@1"
+        },
+        {
+          "command": "tacroman.insertAcronymPlural",
+          "when": "view == tacroman.acronymExplorer && viewItem == tacroman.acronym",
+          "group": "navigation@2"
+        }
+      ]
     }
   },
   "scripts": {

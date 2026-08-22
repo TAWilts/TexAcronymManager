@@ -92,9 +92,25 @@ The scanner deliberately ignores:
 
 The ignored-command list is configurable.
 
+
+### TAcroMan sidebar
+
+On VS Code 1.106 or newer, TAcroMan contributes its own view container to the
+**Secondary Side Bar**. The view shows the database currently used by the
+extension and the loaded acronyms with their long forms.
+
+The view title provides actions to filter or reload the acronym list. Database
+selection and **Open TAcroMan** remain available from the view menu. The filter
+matches the same short/long/key metadata used by completion.
+
+Right-click an acronym to insert either `\ac{KEY}` or `\acp{KEY}` at the current
+LaTeX editor selection. Clicking the database path opens the JSON database.
+
 ### Database handling
 
-- Detects `acronyms.json` in the workspace automatically.
+- Uses the database currently selected in the TAcroMan desktop application by default.
+- An explicit `tacroman.databasePath` setting in VS Code overrides the desktop default.
+- Detects `acronyms.json` in the workspace automatically as a fallback.
 - Supports current TAcroMan schema v2 and older raw-list / `{ "acronyms": [] }`
   database formats.
 - Merges records with the same key, for example singular `acronym` and plural
