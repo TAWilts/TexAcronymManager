@@ -289,5 +289,6 @@
   "galleryBanner": {
     "color": "#111827",
     "theme": "dark"
-  }
+  },
+  "icon": "assets/icon.png"
 }
