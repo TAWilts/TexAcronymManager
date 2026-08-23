@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.5.0
+
+- Show explicit plural forms as separate rows in the TAcroMan sidebar.
+- Keep plural-only fields from being treated as singular display values.
+- Add AUC regression tests for explicit long plurals and `\acp{...}` replacement.
+- Add Linux install/run/build helpers and Ubuntu compatibility CI.
+
 ## 0.4.1
 
 - Make **Check Current File for Acronyms** reliably visible as both an inline toolbar action and an in-view action.

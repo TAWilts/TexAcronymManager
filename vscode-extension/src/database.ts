@@ -80,11 +80,11 @@ function deriveKey(values: Record<string, string>): string {
 }
 
 function deriveShort(values: Record<string, string>, key: string): string {
-  return firstNonEmpty(values, ["short", "key", "short_plural", "id"]) || key;
+  return firstNonEmpty(values, ["short", "key", "id"]) || key;
 }
 
 function deriveLong(values: Record<string, string>): string {
-  return firstNonEmpty(values, ["long", "long_plural", "description", "name"]);
+  return firstNonEmpty(values, ["long", "description", "name"]);
 }
 
 export function candidatesFromDatabase(raw: unknown): AcronymCandidate[] {

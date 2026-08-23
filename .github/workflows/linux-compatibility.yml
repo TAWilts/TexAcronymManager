@@ -1,0 +1,32 @@
+name: Linux compatibility
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GUI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk python3-venv xvfb
+      - name: Install TAcroMan
+        run: |
+          python3 -m venv .venv-linux
+          .venv-linux/bin/python -m pip install --upgrade pip
+          .venv-linux/bin/python -m pip install -e .
+      - name: Verify Tk GUI startup
+        run: xvfb-run -a .venv-linux/bin/python -c "import tkinter as tk; root=tk.Tk(); root.withdraw(); root.update_idletasks(); root.destroy()"
+      - name: Run Python tests
+        run: .venv-linux/bin/python -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run VS Code extension tests
+        working-directory: vscode-extension
+        run: |
+          npm install --no-fund --no-audit
+          npm test

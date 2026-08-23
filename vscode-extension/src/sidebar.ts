@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { AcronymCandidate, matchesQuery } from "./database";
 import { DatabaseManager } from "./databaseManager";
+import { sidebarAcronymForms } from "./sidebarForms";
 
 const VIEW_ID = "tacroman.acronymExplorer";
 const FILTER_CONTEXT = "tacroman.sidebar.filterActive";
@@ -29,6 +30,7 @@ interface ActionNode {
 export interface AcronymNode {
   type: "acronym";
   candidate: AcronymCandidate;
+  plural: boolean;
 }
 
 interface MessageNode {
@@ -134,11 +136,14 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
       }
       case "acronym": {
         const candidate = element.candidate;
-        const label = candidate.short || candidate.key;
-        const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+        const form = sidebarAcronymForms(candidate).find((item) => item.plural === element.plural)
+          ?? sidebarAcronymForms(candidate)[0];
+        const item = new vscode.TreeItem(form.label, vscode.TreeItemCollapsibleState.None);
         item.contextValue = "tacroman.acronym";
-        item.iconPath = new vscode.ThemeIcon("symbol-key");
-        item.description = candidate.long || (candidate.key !== label ? candidate.key : "");
+        item.iconPath = new vscode.ThemeIcon(element.plural ? "symbol-array" : "symbol-key");
+        item.description = element.plural
+          ? (form.long ? `plural · ${form.long}` : "plural")
+          : (form.long || (candidate.key !== form.label ? candidate.key : ""));
         item.tooltip = acronymTooltip(candidate);
         return item;
       }
@@ -207,7 +212,13 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
         icon: "search",
       }];
     }
-    return candidates.map((candidate) => ({ type: "acronym", candidate }));
+    return candidates.flatMap((candidate) =>
+      sidebarAcronymForms(candidate).map((form) => ({
+        type: "acronym" as const,
+        candidate,
+        plural: form.plural,
+      })),
+    );
   }
 
   private filteredCandidates(candidates: AcronymCandidate[]): AcronymCandidate[] {

@@ -455,3 +455,16 @@ npm run package
 ## 📄 License
 
 TAcroMan is released under the **MIT License**.
+
+## Linux development
+
+The VS Code extension itself is platform-independent. Build it on Linux with:
+
+```bash
+bash build-vscode-extension.sh
+```
+
+For desktop integration, install and start TAcroMan with `bash install-linux.sh`
+and `bash run-tacroman.sh`. Integration state is read from
+`$XDG_CONFIG_HOME/tacroman/vscode-integration.json`, falling back to
+`~/.config/tacroman/vscode-integration.json`.

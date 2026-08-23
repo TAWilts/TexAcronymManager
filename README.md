@@ -246,3 +246,19 @@ The extension reads the same `acronyms.json` database and provides:
 It runs alongside LaTeX Workshop and does not patch or depend on LaTeX
 Workshop internals. For development and packaging instructions, see
 `vscode-extension/README.md`.
+
+## Linux
+
+TAcroMan is a Python/Tkinter application and can run natively on Linux. A source
+installation can be prepared with:
+
+```bash
+bash install-linux.sh
+bash run-tacroman.sh
+```
+
+The main system dependency is Python's Tk binding (`python3-tk` on
+Debian/Ubuntu, `python3-tkinter` on Fedora, or `tk` on Arch Linux). The VS Code
+bridge uses `$XDG_CONFIG_HOME/tacroman` or `~/.config/tacroman` and detects the
+`tacroman` launcher inside a virtual environment. Ubuntu CI checks Tk startup,
+the Python tests, and the VS Code extension tests.
