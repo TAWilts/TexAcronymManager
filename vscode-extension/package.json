@@ -2,7 +2,7 @@
   "name": "tacroman-vscode",
   "displayName": "TAcroMan",
   "description": "TAcroMan acronym completions, diagnostics, and Quick Fixes for LaTeX in Visual Studio Code.",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "publisher": "tawilts",
   "license": "MIT",
   "engines": {
@@ -96,8 +96,8 @@
         },
         "tacroman.executablePath": {
           "type": "string",
-          "default": "tacroman",
-          "description": "Executable used by 'TAcroMan: Open TAcroMan'. This can be tacroman from PATH or an absolute path to a TAcroMan executable."
+          "default": "",
+          "description": "Optional explicit executable used by 'TAcroMan: Open TAcroMan'. Leave empty to use the launcher published by the TAcroMan desktop application, with 'tacroman' from PATH as a final fallback."
         },
         "tacroman.launchArguments": {
           "type": "array",

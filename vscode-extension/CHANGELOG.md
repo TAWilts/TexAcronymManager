@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.3.3
+
+- Publish the desktop TAcroMan launcher alongside the active database path.
+- Make **Open TAcroMan** automatically use the current desktop/venv installation.
+- Keep `tacroman.executablePath` as an explicit VS Code override.
+- Hide spawned console windows on Windows.
+
 ## 0.3.2
 
 - Add a one-command Windows build script for installing dependencies, testing,

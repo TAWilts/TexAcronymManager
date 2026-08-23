@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { findCompletionContext } from "./context";
 import { matchesQuery } from "./database";
 import { DatabaseManager } from "./databaseManager";
+import { readDesktopLauncher } from "./desktopIntegration";
 import { registerTAcroManSidebar } from "./sidebar";
 import {
   buildPlainAcronymCompletionForms,
@@ -344,15 +345,29 @@ async function openTAcroMan(databases: DatabaseManager): Promise<void> {
   }
 
   const configuration = vscode.workspace.getConfiguration("tacroman", document?.uri);
-  const executable = configuration.get<string>("executablePath", "tacroman").trim() || "tacroman";
+  const configuredExecutable = configuration.get<string>("executablePath", "").trim();
   const extraArguments = configuration.get<string[]>("launchArguments", []);
-  const args = [...extraArguments, "--database", database.fsPath];
+
+  let executable = configuredExecutable;
+  let launcherArguments: string[] = [];
+
+  if (!executable) {
+    const desktopLauncher = await readDesktopLauncher();
+    if (desktopLauncher) {
+      executable = desktopLauncher.executable;
+      launcherArguments = desktopLauncher.args;
+    } else {
+      executable = "tacroman";
+    }
+  }
+
+  const args = [...launcherArguments, ...extraArguments, "--database", database.fsPath];
 
   try {
     const child = spawn(executable, args, {
       detached: true,
       stdio: "ignore",
-      windowsHide: false,
+      windowsHide: true,
     });
     child.on("error", (error) => {
       vscode.window.showErrorMessage(`TAcroMan could not be started: ${error.message}`);
