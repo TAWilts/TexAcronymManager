@@ -19,7 +19,7 @@
 
 ---
 
-TAcroMan helps you use acronyms consistently while writing LaTeX documents.
+The Tex Acronym Manager (TAcroMan) helps you use acronyms consistently while writing LaTeX documents.
 
 Instead of repeatedly looking up acronym keys or manually replacing plain text,
 TAcroMan connects your acronym database directly to Visual Studio Code and provides:
