@@ -1,205 +1,365 @@
-# TAcroMan for Visual Studio Code
+<p align="center">
+  <img src="https://raw.githubusercontent.com/TAWilts/TexAcronymManager/main/vscode-extension/assets/icon.png"
+       width="128"
+       alt="TAcroMan logo">
+</p>
 
-**Write LaTeX without manually managing every acronym command.**
+<h1 align="center">TAcroMan</h1>
 
-TAcroMan adds acronym-aware IntelliSense, plain-text detection, interactive
-replacement, and direct access to the TAcroMan acronym database while you write.
-It works alongside LaTeX Workshop and uses normal Visual Studio Code extension
-APIs — LaTeX Workshop itself is not modified.
+<p align="center">
+  <strong>Smart acronym support for LaTeX in Visual Studio Code.</strong><br>
+  Write first — let TAcroMan take care of the acronym commands.
+</p>
 
-<!--
-Add the demo GIF as:
-  vscode-extension/assets/tacroman-demo.gif
+<p align="center">
+  <a href="https://github.com/TAWilts/TexAcronymManager">GitHub</a>
+  ·
+  <a href="https://github.com/TAWilts/TexAcronymManager/issues">Report an issue</a>
+</p>
 
-Then rerun apply_tacroman_marketplace_prep.py to insert it here automatically.
--->
+---
 
-## Highlights
+TAcroMan helps you use acronyms consistently while writing LaTeX documents.
 
-### 1. Complete acronym commands
+Instead of repeatedly looking up acronym keys or manually replacing plain text,
+TAcroMan connects your acronym database directly to Visual Studio Code and provides:
 
-Start typing inside a configured acronym command:
+- acronym-aware completion for commands such as `\ac{...}`;
+- suggestions for acronyms written as plain text;
+- lookup by both **short form** and **long form**;
+- an integrated acronym browser in the VS Code sidebar;
+- interactive scanning and replacement of acronyms in existing text;
+- live synchronization when the acronym database changes.
+
+It is especially useful for theses, dissertations, papers, reports, and other
+large LaTeX projects with many acronyms.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/TAWilts/TexAcronymManager/main/vscode-extension/assets/tacroman-demo.gif"
+       alt="TAcroMan feature demonstration">
+</p>
+
+## ✨ Features
+
+### 1. Complete `\ac{...}` commands
+
+Start typing an acronym command:
 
 ```tex
 \ac{AU
 ```
 
-TAcroMan searches the active database and suggests matching entries such as:
+TAcroMan searches the active database and suggests matching acronyms:
 
 ```tex
 \ac{AUV}
 ```
 
-Matching uses the acronym key, short form, long form, and other searchable
-database fields.
+The suggestion shows the acronym together with its long form, so you can choose
+the right entry without leaving the editor.
 
-### 2. Turn a plain acronym into LaTeX
+---
 
-Type a known short form directly in prose:
+### 2. Convert plain acronyms to LaTeX commands
 
-```tex
-The AUV navigates autonomously.
-```
-
-TAcroMan can suggest and replace it with:
+If you type an acronym directly in your text:
 
 ```tex
-The \ac{AUV} navigates autonomously.
+The AUV performs the mission autonomously.
 ```
 
-Plural forms can use the configured plural command, for example:
+TAcroMan can suggest:
 
 ```tex
-AUVs  ->  \acp{AUV}
+The \ac{AUV} performs the mission autonomously.
 ```
 
-### 3. Search by the long form
-
-You do not need to remember the acronym key. Start typing the expansion:
+Plural forms are supported as well:
 
 ```tex
-autonomous under...
+Several AUVs were deployed.
 ```
 
-and TAcroMan can suggest:
+can become:
+
+```tex
+Several \acp{AUV} were deployed.
+```
+
+The singular and plural commands are configurable.
+
+---
+
+### 3. Search by long form
+
+Forgot the acronym itself?
+
+Just start typing the long form:
+
+```text
+autonomous underwater...
+```
+
+TAcroMan can still find:
 
 ```tex
 \ac{AUV}
 ```
 
-This also works through standard VS Code IntelliSense (`Ctrl+Space`).
+This works through normal VS Code IntelliSense and lets you search the acronym
+database by both abbreviation and meaning.
 
-### 4. Manage acronyms without leaving VS Code
+---
 
-The dedicated TAcroMan view in the Secondary Side Bar shows the active database
-and its acronym entries.
+### 4. Manage acronyms directly from VS Code
 
-From the same view you can:
+TAcroMan adds its own view to the **Secondary Side Bar**.
 
-- search the acronym database;
-- reload or select a database;
-- insert singular or plural acronym commands;
-- launch the TAcroMan desktop application;
-- add, edit, or delete acronym entries in the desktop manager.
+There you can:
 
-The extension uses the database currently selected by the desktop application
-by default. An explicit `tacroman.databasePath` remains available as an override.
+- browse all acronyms in the active database;
+- search and filter the acronym list;
+- see short and long forms at a glance;
+- insert `\ac{...}` or `\acp{...}`;
+- select or reload the active database;
+- open the TAcroMan desktop application.
 
-### 5. Check the current file for acronyms
+The desktop application can be launched directly from VS Code when you want to
+add, edit, or delete acronym entries.
 
-**TAcroMan: Check Current File for Acronyms** scans the active LaTeX document for
-known short and long forms.
+Changes to the database are detected automatically — there is normally no need
+to reload the extension manually.
 
-Each occurrence is reviewed individually, so you can choose whether to replace
-it, skip it, or stop the scan. This is useful when integrating older text,
-papers, or manually written sections into a consistent acronym workflow.
+---
 
-The scanner avoids common non-prose contexts including existing acronym
-commands, comments, definitions, citations, references, labels, and verbatim
+### 5. Check an existing file for acronyms
+
+Already have a chapter, paper, or older LaTeX file containing plain acronyms?
+
+Use:
+
+**TAcroMan: Check Current File for Acronyms**
+
+TAcroMan scans the active `.tex` file for known short and long forms.
+
+For every occurrence, you decide individually whether it should be replaced.
+
+Example:
+
+```tex
+The autonomous underwater vehicle uses a DVL.
+```
+
+TAcroMan may suggest:
+
+```tex
+The \ac{AUV} uses a \ac{DVL}.
+```
+
+For each match you can:
+
+- **Replace**
+- **Skip**
+- **Stop checking**
+
+The scanner avoids common non-text contexts such as existing acronym commands,
+comments, citations, references, labels, acronym definitions, and verbatim
 content.
 
-### Live database updates
+---
 
-Changes to the active `acronyms.json` are watched automatically. When TAcroMan
-saves the database, completions and the acronym browser update without requiring
-a manual reload.
+## 🚀 Getting started
 
-## Example workflow
+### 1. Install the extension
 
-```tex
-The autonomous underwater vehicle communicates with two AUVs.
+Open the Extensions view in Visual Studio Code:
+
+```text
+Ctrl+Shift+X
 ```
 
-TAcroMan can help turn this into:
+Search for:
 
-```tex
-The \ac{AUV} communicates with two \acp{AUV}.
+```text
+TAcroMan
 ```
 
-without requiring you to remember the acronym key first.
+and install the extension.
 
-## Getting started
+For local development, a packaged `.vsix` can also be installed using:
 
-1. Install the extension from the Visual Studio Marketplace.
-2. Open a LaTeX project.
-3. Open the **TAcroMan** view in the Secondary Side Bar.
-4. Select an existing `acronyms.json`, or launch the TAcroMan desktop application
-   and manage the database there.
-5. Start typing `\ac{...}`, a known short form, or a known long form.
+**Extensions → … → Install from VSIX…**
 
-TAcroMan is designed to work alongside **LaTeX Workshop**. LaTeX Workshop is not
-a required internal dependency and is not modified by this extension.
+---
 
-## Database integration
+### 2. Select an acronym database
 
-The desktop application and VS Code extension share the TAcroMan JSON database.
+TAcroMan uses a JSON database containing the available acronyms.
 
-Database resolution follows this order:
+You can either:
 
-1. explicit VS Code setting `tacroman.databasePath`;
-2. database currently selected in the TAcroMan desktop application;
-3. previously selected/workspace database;
-4. workspace discovery.
+- select a database from VS Code using  
+  **TAcroMan: Select Database**, or
+- use the database currently selected in the TAcroMan desktop application.
 
-The selected JSON file is watched for changes, including when it lives outside
-the current VS Code workspace.
+Once a database is active, the sidebar and completion features are available
+immediately.
 
-## Commands
+---
 
-| Command | Purpose |
+### 3. Start writing
+
+Try any of the following:
+
+```tex
+\ac{
+```
+
+```text
+AUV
+```
+
+```text
+autonomous underwater
+```
+
+or open the TAcroMan sidebar and browse the database directly.
+
+---
+
+## 🔄 Live database synchronization
+
+The active `acronyms.json` file is watched automatically.
+
+When an acronym is added, edited, or deleted in TAcroMan, the VS Code extension
+updates its database cache and sidebar automatically.
+
+This also works when the database is located outside the current VS Code
+workspace.
+
+---
+
+## 🧭 TAcroMan sidebar
+
+The sidebar provides quick access to the most common actions:
+
+- **Check current file for acronyms**
+- **Open TAcroMan**
+- view the active database
+- search/filter acronyms
+- reload the database
+- select another database
+- insert singular or plural acronym commands
+
+Right-click an acronym to insert it directly into the active LaTeX document.
+
+---
+
+## ⌨️ Commands
+
+Open the Command Palette with `Ctrl+Shift+P` and search for **TAcroMan**.
+
+| Command | Description |
 | --- | --- |
-| `TAcroMan: Check Current File for Acronyms` | Interactively review known acronym occurrences |
-| `TAcroMan: Open TAcroMan` | Launch the desktop acronym manager |
-| `TAcroMan: Select Database` | Choose the JSON database |
-| `TAcroMan: Reload Database` | Force a database reload |
-| `TAcroMan: Insert \ac{...}` | Insert the selected acronym |
-| `TAcroMan: Insert \acp{...}` | Insert the selected acronym in plural form |
+| **TAcroMan: Check Current File for Acronyms** | Scan the active `.tex` file and review replacements interactively |
+| **TAcroMan: Open TAcroMan** | Open the desktop acronym manager |
+| **TAcroMan: Select Database** | Select an `acronyms.json` database |
+| **TAcroMan: Reload Database** | Force the current database to reload |
+| **TAcroMan: Insert `\ac{...}`** | Insert the selected acronym in singular form |
+| **TAcroMan: Insert `\acp{...}`** | Insert the selected acronym in plural form |
 
-## Settings
+---
+
+## ⚙️ Configuration
+
+For most users, the default settings should work without modification.
 
 <details>
-<summary><strong>Show extension settings</strong></summary>
+<summary><strong>Show advanced settings</strong></summary>
 
 ### `tacroman.databasePath`
 
-Optional explicit path to the TAcroMan JSON database. When empty, the extension
-uses the database published by the desktop TAcroMan application and then falls
-back to workspace discovery.
+Optional explicit path to an `acronyms.json` file.
+
+If left empty, TAcroMan first tries to use the database published by the desktop
+application and then falls back to workspace-based discovery.
+
+---
 
 ### `tacroman.latexCommands`
 
-LaTeX commands for which completion should be offered inside the first braced
-argument.
+Defines the LaTeX commands for which acronym completion is enabled.
+
+For example:
+
+```json
+[
+  "ac",
+  "acp"
+]
+```
+
+---
 
 ### `tacroman.plainTextCompletion`
 
-Offer completions while typing known short or long forms directly in LaTeX
-prose.
+Enable suggestions while typing acronym short forms or long forms directly in
+normal LaTeX text.
+
+---
 
 ### `tacroman.plainTextDiagnostics`
 
 Detect known acronyms written as plain text and offer Quick Fixes.
 
+---
+
 ### `tacroman.quickFixSingularCommand`
 
-Command used for singular replacements. Default: `ac`.
+LaTeX command used for singular replacements.
+
+Default:
+
+```text
+ac
+```
+
+---
 
 ### `tacroman.quickFixPluralCommand`
 
-Command used for plural replacements. Default: `acp`.
+LaTeX command used for plural replacements.
+
+Default:
+
+```text
+acp
+```
+
+---
 
 ### `tacroman.inferPlainTextPlurals`
 
-Recognize simple plural forms when an explicit plural is not stored.
+Allows TAcroMan to recognize simple plural forms even when no explicit plural is
+stored in the database.
+
+---
 
 ### `tacroman.ignoredArgumentCommands`
 
-Commands whose first braced argument should not be scanned as prose.
+Defines LaTeX commands whose braced arguments should not be interpreted as
+normal prose during acronym detection.
+
+---
 
 ### `tacroman.executablePath`
 
-Optional explicit desktop executable. Leave empty to use the launcher published
-by TAcroMan automatically.
+Optional explicit path to the TAcroMan desktop executable.
+
+Leave this empty to use the launcher automatically published by the desktop
+application.
+
+---
 
 ### `tacroman.launchArguments`
 
@@ -207,35 +367,82 @@ Additional arguments passed when launching the desktop application.
 
 </details>
 
-## Desktop application
+---
 
-The VS Code extension is part of the same repository as the TAcroMan desktop
-application:
+## 🖥️ TAcroMan desktop application
 
-https://github.com/TAWilts/TexAcronymManager
+The VS Code extension is part of the larger
+[TAcroMan project](https://github.com/TAWilts/TexAcronymManager).
 
-The desktop application provides the full database editor and LaTeX output
-generation workflow. The extension focuses on using that database efficiently
-while writing.
+The desktop application provides a graphical interface for managing the acronym
+database and generating LaTeX acronym definitions.
 
-## Feedback and issues
+The VS Code extension focuses on using that database efficiently while writing.
 
-Bug reports, feature requests, and reproducible examples are welcome:
+You can therefore use the two together:
 
-https://github.com/TAWilts/TexAcronymManager/issues
+```text
+TAcroMan desktop
+       ↓
+ acronyms.json
+       ↓
+VS Code extension
+       ↓
+   LaTeX document
+```
 
-## Development
+The database remains a normal JSON file, so the extension does not lock you into
+a proprietary document format.
 
-From the repository root on Windows:
+---
+
+## 🤝 Works alongside LaTeX Workshop
+
+TAcroMan is designed to complement
+[LaTeX Workshop](https://marketplace.visualstudio.com/items?itemName=James-Yu.latex-workshop).
+
+It does not modify LaTeX Workshop and does not replace its LaTeX editing,
+building, citation, or navigation features.
+
+TAcroMan simply adds acronym-specific tooling on top of your normal VS Code
+LaTeX workflow.
+
+---
+
+## 🐛 Feedback and feature requests
+
+Found a bug or have an idea for another acronym workflow?
+
+Please open an issue:
+
+**https://github.com/TAWilts/TexAcronymManager/issues**
+
+If possible, include:
+
+- your VS Code version;
+- your TAcroMan extension version;
+- your operating system;
+- a small LaTeX example that reproduces the issue.
+
+---
+
+## 👨‍💻 Development
+
+The VS Code extension lives in the same repository as the desktop application.
+
+To build it locally on Windows:
 
 ```powershell
 .\build-vscode-extension.cmd
 ```
 
-The build script installs Node dependencies, runs the extension tests, and
-creates the VSIX package.
+The script automatically:
 
-From `vscode-extension/` directly:
+1. installs/updates the Node dependencies;
+2. runs the extension tests;
+3. builds the `.vsix` package.
+
+Alternatively, from `vscode-extension/`:
 
 ```bash
 npm install
@@ -243,6 +450,8 @@ npm test
 npm run package
 ```
 
-## License
+---
 
-MIT
+## 📄 License
+
+TAcroMan is released under the **MIT License**.
