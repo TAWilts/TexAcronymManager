@@ -723,7 +723,16 @@ class TAcroManApp(tk.Tk):
         if not selected_uids:
             return
 
-        self.entries = [entry for entry in self.entries if entry.uid not in selected_uids]
+        remaining_entries = [
+            entry for entry in self.entries if entry.uid not in selected_uids
+        ]
+        if len(remaining_entries) == len(self.entries):
+            return
+
+        # Persist deletion before updating the in-memory/UI state.
+        save_database(self.database_path, remaining_entries)
+
+        self.entries = remaining_entries
         self._refresh_table()
 
         # Historical TAcroMan versions used slightly different form-clear

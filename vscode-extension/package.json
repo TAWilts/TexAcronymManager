@@ -1,7 +1,7 @@
 {
   "name": "tacroman-vscode",
   "displayName": "TAcroMan",
-  "description": "TAcroMan acronym completions, diagnostics, and Quick Fixes for LaTeX in Visual Studio Code.",
+  "description": "Smart LaTeX acronym completion, plain-text detection, interactive replacement, and TAcroMan database integration.",
   "version": "0.4.1",
   "publisher": "tawilts",
   "license": "MIT",
@@ -10,13 +10,33 @@
   },
   "categories": [
     "Programming Languages",
+    "Linters",
     "Other"
   ],
   "keywords": [
     "latex",
+    "tex",
     "acronym",
-    "tacroman",
-    "latex-workshop"
+    "acronyms",
+    "abbreviation",
+    "abbreviations",
+    "glossary",
+    "academic-writing",
+    "scientific-writing",
+    "thesis",
+    "dissertation",
+    "paper",
+    "overleaf",
+    "latex-workshop",
+    "autocomplete",
+    "completion",
+    "intellisense",
+    "linter",
+    "quick-fix",
+    "search-replace",
+    "ac",
+    "acp",
+    "tacroman"
   ],
   "activationEvents": [
     "onLanguage:latex",
@@ -264,5 +284,10 @@
   "bugs": {
     "url": "https://github.com/TAWilts/TexAcronymManager/issues"
   },
-  "homepage": "https://github.com/TAWilts/TexAcronymManager#readme"
+  "homepage": "https://github.com/TAWilts/TexAcronymManager",
+  "pricing": "Free",
+  "galleryBanner": {
+    "color": "#111827",
+    "theme": "dark"
+  }
 }
