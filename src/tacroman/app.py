@@ -27,6 +27,7 @@ from .rendering import preview_diff, profile_template_warnings, render, usage_fo
 from .reference_audit_dialog import ReferenceAuditDialog
 from .storage import atomic_write_text, load_database, load_settings, save_database, save_settings
 from .vscode_integration import write_vscode_integration_state
+from .table_selection import selected_entry_uids
 
 
 APP_NAME = "TAcroMan"
@@ -708,19 +709,38 @@ class TAcroManApp(tk.Tk):
             self.after_idle(first_widget.focus_set)
 
     def _delete_selected(self) -> None:
-        selection = self.tree.selection()
-        if not selection:
-            messagebox.showinfo(APP_NAME, self.t("select_entry_first"))
+        """Delete the selected main-table entry independent of sorting/filtering."""
+        selected = tuple(self.tree.selection())
+        if not selected:
+            focused = self.tree.focus()
+            selected = (focused,) if focused else ()
+        if not selected:
             return
-        entry = next((item for item in self.entries if item.uid == selection[0]), None)
-        if entry is None:
+
+        visible_entries = self._filtered_entries()
+        row_iids = tuple(self.tree.get_children(""))
+        selected_uids = selected_entry_uids(selected, row_iids, visible_entries)
+        if not selected_uids:
             return
-        if not messagebox.askyesno(APP_NAME, self.t("confirm_delete", key=self._entry_key(entry, self._visible_command_map()[entry.command_id]))):
-            return
-        self.entries = [item for item in self.entries if item.uid != entry.uid]
-        self._start_new_entry()
-        if self._persist_and_render():
-            self._refresh_table()
+
+        self.entries = [entry for entry in self.entries if entry.uid not in selected_uids]
+        self._refresh_table()
+
+        # Historical TAcroMan versions used slightly different form-clear
+        # helper names. Clear stale editor data when one exists, without
+        # coupling this fix to a particular UI revision.
+        for helper_name in (
+            "_clear_entry_form",
+            "_clear_form",
+            "_clear_editor",
+            "_reset_entry_form",
+            "_reset_form",
+        ):
+            helper = getattr(self, helper_name, None)
+            if callable(helper):
+                helper()
+                break
+
 
     def _persist_and_render(self) -> bool:
         try:

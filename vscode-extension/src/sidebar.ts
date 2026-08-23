@@ -168,6 +168,13 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
     }
 
     if (element.group === "database") {
+      const checkAcronyms: ActionNode = {
+        type: "action",
+        label: "Check current file for acronyms",
+        description: "Review and replace detected short/long forms",
+        command: "tacroman.checkAcronyms",
+        icon: "checklist",
+      };
       const openTAcroMan: ActionNode = {
         type: "action",
         label: "Open TAcroMan",
@@ -176,15 +183,16 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
         icon: "edit",
       };
       if (snapshot.error) {
-        return [openTAcroMan, { type: "message", label: snapshot.error, icon: "error" }];
+        return [checkAcronyms, openTAcroMan, { type: "message", label: snapshot.error, icon: "error" }];
       }
       if (!snapshot.database) {
         return [
+          checkAcronyms,
           openTAcroMan,
           { type: "message", label: "No TAcroMan database selected", icon: "warning" },
         ];
       }
-      return [openTAcroMan, { type: "database", uri: snapshot.database }];
+      return [checkAcronyms, openTAcroMan, { type: "database", uri: snapshot.database }];
     }
 
     if (snapshot.error) {

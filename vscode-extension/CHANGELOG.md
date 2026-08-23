@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.4.1
+
+- Make **Check Current File for Acronyms** reliably visible as both an inline toolbar action and an in-view action.
+- Fix deletion of desktop TAcroMan entries after table sorting/filtering by resolving selected rows to stable entry UIDs.
+
 ## 0.4.0
 
 - Watch the active acronym JSON file directly and refresh completion, diagnostics, and the sidebar after external saves.
