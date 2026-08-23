@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.4.0
+
+- Watch the active acronym JSON file directly and refresh completion, diagnostics, and the sidebar after external saves.
+- Add **Check Current File for Acronyms** to scan short and long forms in the active LaTeX file.
+- Review every detected acronym individually before replacing it with the configured `\ac{...}` or `\acp{...}` command.
+
 ## 0.3.3
 
 - Publish the desktop TAcroMan launcher alongside the active database path.

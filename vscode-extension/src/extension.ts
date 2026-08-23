@@ -5,6 +5,8 @@ import { matchesQuery } from "./database";
 import { DatabaseManager } from "./databaseManager";
 import { readDesktopLauncher } from "./desktopIntegration";
 import { registerTAcroManSidebar } from "./sidebar";
+import { registerCheckAcronymsCommand } from "./acronymCheckCommand";
+import { registerDatabaseWatcher } from "./databaseWatcher";
 import {
   buildPlainAcronymCompletionForms,
   buildPlainAcronymForms,
@@ -384,6 +386,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const diagnostics = new PlainAcronymDiagnostics(databases);
   context.subscriptions.push(databases, diagnostics);
   registerTAcroManSidebar(context, databases);
+  registerDatabaseWatcher(context, databases);
+  registerCheckAcronymsCommand(context, databases);
 
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
