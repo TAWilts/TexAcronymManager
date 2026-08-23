@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.3.2
+
+- Add a one-command Windows build script for installing dependencies, testing,
+  and packaging the VS Code extension.
+- Make **Open TAcroMan** a visible action in the sidebar title.
+- Add an in-view **Open TAcroMan** entry for adding or editing acronyms.
+
 ## 0.3.1
 
 - Fix the Secondary Side Bar view-container identifier so VS Code accepts the

@@ -2,7 +2,7 @@
   "name": "tacroman-vscode",
   "displayName": "TAcroMan",
   "description": "TAcroMan acronym completions, diagnostics, and Quick Fixes for LaTeX in Visual Studio Code.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "tawilts",
   "license": "MIT",
   "engines": {
@@ -215,7 +215,7 @@
         {
           "command": "tacroman.open",
           "when": "view == tacroman.acronymExplorer",
-          "group": "tacroman@2"
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [

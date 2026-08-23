@@ -18,6 +18,14 @@ interface DatabaseNode {
   uri: vscode.Uri;
 }
 
+interface ActionNode {
+  type: "action";
+  label: string;
+  description?: string;
+  command: string;
+  icon: string;
+}
+
 export interface AcronymNode {
   type: "acronym";
   candidate: AcronymCandidate;
@@ -29,7 +37,7 @@ interface MessageNode {
   icon: string;
 }
 
-type SidebarNode = GroupNode | DatabaseNode | AcronymNode | MessageNode;
+type SidebarNode = GroupNode | DatabaseNode | ActionNode | AcronymNode | MessageNode;
 
 interface SidebarSnapshot {
   database?: vscode.Uri;
@@ -113,6 +121,17 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
         };
         return item;
       }
+      case "action": {
+        const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+        item.contextValue = "tacroman.action";
+        item.iconPath = new vscode.ThemeIcon(element.icon);
+        item.description = element.description;
+        item.command = {
+          command: element.command,
+          title: element.label,
+        };
+        return item;
+      }
       case "acronym": {
         const candidate = element.candidate;
         const label = candidate.short || candidate.key;
@@ -149,13 +168,23 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
     }
 
     if (element.group === "database") {
+      const openTAcroMan: ActionNode = {
+        type: "action",
+        label: "Open TAcroMan",
+        description: "Add or edit acronyms",
+        command: "tacroman.open",
+        icon: "edit",
+      };
       if (snapshot.error) {
-        return [{ type: "message", label: snapshot.error, icon: "error" }];
+        return [openTAcroMan, { type: "message", label: snapshot.error, icon: "error" }];
       }
       if (!snapshot.database) {
-        return [{ type: "message", label: "No TAcroMan database selected", icon: "warning" }];
+        return [
+          openTAcroMan,
+          { type: "message", label: "No TAcroMan database selected", icon: "warning" },
+        ];
       }
-      return [{ type: "database", uri: snapshot.database }];
+      return [openTAcroMan, { type: "database", uri: snapshot.database }];
     }
 
     if (snapshot.error) {
