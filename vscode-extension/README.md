@@ -31,7 +31,7 @@ TAcroMan connects your acronym database directly to Visual Studio Code and provi
 - interactive scanning and replacement of acronyms in existing text;
 - live synchronization when the acronym database changes.
 
-Use  **ctrl+whitespace** to see the suggested acronym.
+Use **Ctrl+Space** (`Ctrl+Whitespace`) to see the suggested acronyms.
 
 It is especially useful for theses, dissertations, papers, reports, and other
 large LaTeX projects with many acronyms.
@@ -50,7 +50,7 @@ Start typing an acronym command:
 ```tex
 \ac{AU
 ```
-And press **ctrl+whitespace** (as it always will be...).
+Then press **Ctrl+Space** (`Ctrl+Whitespace`)(as it always will be...).
 TAcroMan searches the active database and suggests matching acronyms:
 
 ```tex
@@ -206,6 +206,24 @@ You can either:
 
 Once a database is active, the sidebar and completion features are available
 immediately.
+
+### Working with multiple authors
+
+The `acronyms.json` file is the shared source of truth for the acronym
+database. If several authors work on the same project, keep this file
+synchronized between their computers using a suitable method:
+
+- **Git** is recommended. Commit and push changes to `acronyms.json`, and pull
+  the latest version before editing it.
+- A cloud-synchronized folder can also be used, but simultaneous edits or
+  synchronization conflicts may overwrite changes. Use this option with care
+  and avoid editing the database concurrently on multiple computers.
+
+After synchronizing the file, point TAcroMan to the local copy. In the VS Code
+extension, use **TAcroMan: Select Database** or configure
+`tacroman.databasePath`. In the desktop application, select the corresponding
+database path in the upper-right corner or use the database-selection command.
+Once the path is set, all authors can use the same acronym database.
 
 ---
 
@@ -395,6 +413,15 @@ VS Code extension
 
 The database remains a normal JSON file, so the extension does not lock you into
 a proprietary document format.
+
+## 🧭 Roadmap
+
+- Develop a safer cloud-based synchronization method for shared acronym
+  databases.
+- Suggest converting a word or phrase to an acronym command when it occurs a
+  configurable number of times in the document.
+- Add an online acronym check to determine whether the spelling is correct,
+  whether an acronym is commonly used, and whether alternative acronyms exist.
 
 ---
 
