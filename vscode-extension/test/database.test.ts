@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { candidatesFromDatabase, matchesQuery, recordsFromDatabase } from "../src/database";
+import { candidatesFromDatabase, matchesQuery, rankCandidatesForQuery, recordsFromDatabase } from "../src/database";
 
 const v2 = {
   schema_version: 2,
@@ -49,6 +49,19 @@ test("searches across short form, long form and other fields", () => {
   assert.equal(matchesQuery(auv, "autonomous under"), true);
   assert.equal(matchesQuery(auv, "robotics vehicle"), true);
   assert.equal(matchesQuery(auv, "sonar"), false);
+});
+
+test("ranks an exact acronym completion before incidental metadata matches", () => {
+  const candidates = candidatesFromDatabase({
+    entries: [
+      { command_id: "acronym", values: { short: "ATTK", long: "acoustic tracking", note: "Compatible with AUV systems" } },
+      { command_id: "acronym", values: { short: "AUV", long: "autonomous underwater vehicle" } },
+      { command_id: "acronym", values: { short: "AUVS", long: "autonomous underwater vehicle system" } },
+    ],
+  });
+
+  const matches = candidates.filter((candidate) => matchesQuery(candidate, "AUV"));
+  assert.deepEqual(rankCandidatesForQuery(matches, "AUV").map((candidate) => candidate.key), ["AUV", "AUVS", "ATTK"]);
 });
 
 test("prefers singular display data even when plural record comes first", () => {

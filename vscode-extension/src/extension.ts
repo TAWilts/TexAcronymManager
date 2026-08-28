@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import * as vscode from "vscode";
 import { findCompletionContext } from "./context";
-import { matchesQuery } from "./database";
+import { matchesQuery, rankCandidatesForQuery } from "./database";
 import { DatabaseManager } from "./databaseManager";
 import { readDesktopLauncher } from "./desktopIntegration";
 import { registerTAcroManSidebar } from "./sidebar";
@@ -68,8 +68,10 @@ class TAcroManCompletionProvider implements vscode.CompletionItemProvider {
       position,
     );
 
-    return candidates
-      .filter((candidate) => matchesQuery(candidate, context.query))
+    return rankCandidatesForQuery(
+      candidates.filter((candidate) => matchesQuery(candidate, context.query)),
+      context.query,
+    )
       .slice(0, maxItems)
       .map((candidate, index) => {
         const item = new vscode.CompletionItem(candidate.key, vscode.CompletionItemKind.Reference);

@@ -148,3 +148,61 @@ export function matchesQuery(candidate: AcronymCandidate, query: string): boolea
   const haystack = candidate.searchText.toLocaleLowerCase();
   return terms.every((term) => haystack.includes(term));
 }
+
+function queryMatchRank(candidate: AcronymCandidate, query: string): number {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  const key = candidate.key.toLocaleLowerCase();
+  const short = candidate.short.toLocaleLowerCase();
+  const long = candidate.long.toLocaleLowerCase();
+  const otherValues = Object.entries(candidate.values)
+    .filter(([field]) => field !== "short" && field !== "long")
+    .map(([, value]) => value.toLocaleLowerCase());
+
+  if (key === normalizedQuery) {
+    return 0;
+  }
+  if (short === normalizedQuery) {
+    return 1;
+  }
+  if (key.startsWith(normalizedQuery)) {
+    return 2;
+  }
+  if (short.startsWith(normalizedQuery)) {
+    return 3;
+  }
+  if (long.startsWith(normalizedQuery)) {
+    return 4;
+  }
+  if (otherValues.some((value) => value.startsWith(normalizedQuery))) {
+    return 5;
+  }
+  if (key.includes(normalizedQuery)) {
+    return 6;
+  }
+  if (short.includes(normalizedQuery)) {
+    return 7;
+  }
+  if (long.includes(normalizedQuery)) {
+    return 8;
+  }
+  return 9;
+}
+
+/**
+ * Sort matching candidates by how directly they match a completion query.
+ * An exact acronym is always offered before entries which merely mention the
+ * same text in their long form or metadata.
+ */
+export function rankCandidatesForQuery(
+  candidates: readonly AcronymCandidate[],
+  query: string,
+): AcronymCandidate[] {
+  return [...candidates].sort((a, b) =>
+    queryMatchRank(a, query) - queryMatchRank(b, query)
+    || a.key.localeCompare(b.key, undefined, { sensitivity: "base" })
+  );
+}
