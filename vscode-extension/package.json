@@ -2,7 +2,7 @@
   "name": "tacroman-vscode",
   "displayName": "TAcroMan",
   "description": "Smart LaTeX acronym completion, plain-text detection, interactive replacement, and TAcroMan database integration.",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "publisher": "tawilts",
   "license": "MIT",
   "engines": {
@@ -267,7 +267,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node --test out/test/*.test.js",
-    "package": "vsce package",
+    "version:prepare": "node ./scripts/prepare-version.js",
+    "package": "npm run version:prepare && vsce package",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

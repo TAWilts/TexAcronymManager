@@ -442,7 +442,20 @@ The script automatically:
 
 1. installs/updates the Node dependencies;
 2. runs the extension tests;
-3. builds the `.vsix` package.
+3. selects an unused extension version and builds the `.vsix` package.
+
+### Package version
+
+`VERSION` is the source of truth for the next extension package. Put the
+desired release version in `vscode-extension/VERSION`, for example `0.6.9`,
+then run either build command above (or `npm run package` from
+`vscode-extension/`). The package build updates `package.json` to use that
+version.
+
+If `tacroman-vscode-0.6.9.vsix` already exists in `vscode-extension/`, the
+build automatically increases the patch number until it finds a free version:
+`0.6.9` becomes `0.6.10`, for example. It writes the selected version back to
+`VERSION`, so the file always records the last packaged version.
 
 Alternatively, from `vscode-extension/`:
 

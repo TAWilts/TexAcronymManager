@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.5.1
+
+- Add a `VERSION`-file packaging workflow that automatically selects the next
+  available patch version when a VSIX with the requested version already exists.
+
 ## 0.5.0
 
 - Show explicit plural forms as separate rows in the TAcroMan sidebar.
