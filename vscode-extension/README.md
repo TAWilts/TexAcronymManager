@@ -31,6 +31,8 @@ TAcroMan connects your acronym database directly to Visual Studio Code and provi
 - interactive scanning and replacement of acronyms in existing text;
 - live synchronization when the acronym database changes.
 
+Use  **ctrl+whitespace** to see the suggested acronym.
+
 It is especially useful for theses, dissertations, papers, reports, and other
 large LaTeX projects with many acronyms.
 
@@ -48,7 +50,7 @@ Start typing an acronym command:
 ```tex
 \ac{AU
 ```
-
+And press **ctrl+whitespace** (as it always will be...).
 TAcroMan searches the active database and suggests matching acronyms:
 
 ```tex
