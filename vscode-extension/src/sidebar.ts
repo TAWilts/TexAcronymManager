@@ -187,17 +187,28 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
         command: "tacroman.open",
         icon: "edit",
       };
+      const databaseAction: ActionNode = {
+        type: "action",
+        label: snapshot.database ? `Database: ${snapshot.database.fsPath}` : "Select database",
+        description: "Choose the TAcroMan JSON database",
+        command: "tacroman.selectDatabase",
+        icon: "folder-opened",
+      };
+      const output = await this.databases.getOutputUri();
+      const outputAction: ActionNode = {
+        type: "action",
+        label: output ? `Output: ${output.fsPath}` : "Select generated TeX output",
+        description: "Choose the generated TeX file",
+        command: "tacroman.selectOutput",
+        icon: "save-as",
+      };
       if (snapshot.error) {
-        return [checkAcronyms, openTAcroMan, { type: "message", label: snapshot.error, icon: "error" }];
+        return [checkAcronyms, openTAcroMan, databaseAction, outputAction, { type: "message", label: snapshot.error, icon: "error" }];
       }
       if (!snapshot.database) {
-        return [
-          checkAcronyms,
-          openTAcroMan,
-          { type: "message", label: "No TAcroMan database selected", icon: "warning" },
-        ];
+        return [checkAcronyms, openTAcroMan, databaseAction, outputAction];
       }
-      return [checkAcronyms, openTAcroMan, { type: "database", uri: snapshot.database }];
+      return [checkAcronyms, openTAcroMan, databaseAction, outputAction];
     }
 
     if (snapshot.error) {

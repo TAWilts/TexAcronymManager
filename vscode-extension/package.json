@@ -2,7 +2,7 @@
   "name": "tacroman-vscode",
   "displayName": "TAcroMan",
   "description": "Smart LaTeX acronym completion, plain-text detection, interactive replacement, and TAcroMan database integration.",
-  "version": "0.5.5",
+  "version": "0.5.8",
   "publisher": "tawilts",
   "license": "MIT",
   "engines": {
@@ -41,6 +41,7 @@
   "activationEvents": [
     "onLanguage:latex",
     "onCommand:tacroman.selectDatabase",
+    "onCommand:tacroman.selectOutput",
     "onCommand:tacroman.open",
     "onCommand:tacroman.reload",
     "onView:tacroman.acronymExplorer",
@@ -62,6 +63,11 @@
         "command": "tacroman.open",
         "title": "TAcroMan: Open TAcroMan",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "tacroman.selectOutput",
+        "title": "TAcroMan: Select Generated TeX Output",
+        "icon": "$(save-as)"
       },
       {
         "command": "tacroman.reload",
@@ -96,11 +102,6 @@
     "configuration": {
       "title": "TAcroMan",
       "properties": {
-        "tacroman.databasePath": {
-          "type": "string",
-          "default": "",
-          "description": "Optional path to the TAcroMan JSON database. Relative paths are resolved from the workspace folder. Leave empty for automatic discovery of acronyms.json files."
-        },
         "tacroman.latexCommands": {
           "type": "array",
           "items": {
@@ -119,11 +120,6 @@
             "Acp"
           ],
           "description": "LaTeX commands for which TAcroMan should offer completion inside the first braced argument. Enter command names without the leading backslash."
-        },
-        "tacroman.executablePath": {
-          "type": "string",
-          "default": "",
-          "description": "Optional explicit executable used by 'TAcroMan: Open TAcroMan'. Leave empty to use the launcher published by the TAcroMan desktop application, with 'tacroman' from PATH as a final fallback."
         },
         "tacroman.launchArguments": {
           "type": "array",

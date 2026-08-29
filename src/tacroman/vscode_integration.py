@@ -1,28 +1,35 @@
-"""Small, stable bridge between the desktop app and editor integrations.
-
-The VS Code extension should not need to know the internal format/location of
-TAcroMan's regular settings. Instead the desktop app publishes just the pieces
-an editor needs to a tiny integration-state file in the user's config folder.
-"""
+"""Shared per-user state for the desktop app and editor integrations."""
 
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import sys
+from typing import Any
 
-from .storage import atomic_write_text
+from .storage import atomic_write_text, load_settings
+
+
+STATE_FILENAME = "state.json"
+
+
+def tacroman_user_directory(*, home: Path | None = None) -> Path:
+    """Return the directory shared by every TAcroMan frontend."""
+    return (home or Path.home()).expanduser() / "TAcroMan"
+
+
+def shared_state_path(*, home: Path | None = None) -> Path:
+    return tacroman_user_directory(home=home) / STATE_FILENAME
 
 
 def vscode_integration_state_path() -> Path:
-    """Return the cross-platform per-user integration-state path."""
-    if sys.platform == "win32" and os.environ.get("APPDATA"):
-        return Path(os.environ["APPDATA"]) / "TAcroMan" / "vscode-integration.json"
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "TAcroMan" / "vscode-integration.json"
-    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    return config_home / "tacroman" / "vscode-integration.json"
+    """Compatibility alias for integrations importing the former function."""
+    return shared_state_path()
+
+
+def read_shared_state(path: Path | None = None) -> dict[str, Any]:
+    """Read the one shared state file in the TAcroMan user directory."""
+    return load_settings(path or shared_state_path())
 
 
 def detect_editor_launcher(
@@ -32,16 +39,7 @@ def detect_editor_launcher(
     platform: str | None = None,
     frozen: bool | None = None,
 ) -> dict[str, object]:
-    """Return a launcher that can start this TAcroMan installation again.
-
-    Preference order:
-    1. A frozen/bundled executable (e.g. a future packaged TAcroMan build).
-    2. The ``tacroman`` console launcher next to the active Python interpreter.
-       Editable/venv installations created with ``pip install -e .`` normally
-       provide exactly this launcher.
-    3. The executable/script that launched the current process, when usable.
-    4. ``python -m tacroman`` as a portable fallback.
-    """
+    """Return a launcher that can start this TAcroMan installation again."""
     python = Path(executable or sys.executable).expanduser().resolve()
     current_platform = platform or sys.platform
     is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else bool(frozen)
@@ -75,26 +73,42 @@ def detect_editor_launcher(
     return {"executable": str(python), "args": ["-m", "tacroman"]}
 
 
-def write_vscode_integration_state(database_path: str | Path) -> None:
-    """Publish the active database and launcher for editor integrations.
-
-    This is deliberately best-effort. Integration metadata must never make
-    normal TAcroMan usage fail because a config directory is not writable.
-    """
+def write_vscode_integration_state(
+    database_path: str | Path | None = None,
+    output_path: str | Path | None = None,
+    *,
+    output_mode: str | None = None,
+    profiles_path: str | Path | None = None,
+    selected_profile_id: str | None = None,
+    language: str | None = None,
+    render_profile: dict[str, object] | None = None,
+    state_path: Path | None = None,
+) -> None:
+    """Merge the active frontend state into the shared per-user file."""
     try:
-        payload: dict[str, object] = {
-            "launcher": detect_editor_launcher(),
-        }
+        target = state_path or shared_state_path()
+        payload: dict[str, Any] = read_shared_state(target)
+        payload.pop("last_database_path", None)
+        payload["version"] = 1
+        payload["launcher"] = detect_editor_launcher()
 
-        raw = str(database_path).strip()
-        if raw:
-            payload["databasePath"] = str(Path(raw).expanduser().resolve())
+        if database_path is not None and str(database_path).strip():
+            resolved = str(Path(database_path).expanduser().resolve())
+            payload["databasePath"] = resolved
+        if output_path is not None and str(output_path).strip():
+            payload["outputPath"] = str(Path(output_path).expanduser().resolve())
+        if output_mode in {"project", "database", "custom"}:
+            payload["outputMode"] = output_mode
+        if profiles_path is not None and str(profiles_path).strip():
+            payload["profilesPath"] = str(Path(profiles_path).expanduser().resolve())
+        if selected_profile_id:
+            payload["selectedProfileId"] = selected_profile_id
+        if language:
+            payload["language"] = language
+        if render_profile is not None:
+            payload["renderProfile"] = render_profile
 
-        target = vscode_integration_state_path()
         target.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(
-            target,
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        )
-    except (OSError, UnicodeError, ValueError):
+        atomic_write_text(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    except (OSError, UnicodeError, ValueError, TypeError):
         return

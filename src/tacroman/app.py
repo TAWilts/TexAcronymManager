@@ -25,18 +25,13 @@ from .model import (
 from .profiles import load_profiles, normalise_profile, save_profiles
 from .rendering import preview_diff, profile_template_warnings, render, usage_for
 from .reference_audit_dialog import ReferenceAuditDialog
-from .storage import atomic_write_text, load_database, load_settings, save_database, save_settings
-from .vscode_integration import write_vscode_integration_state
+from .storage import atomic_write_text, load_database, save_database
+from .vscode_integration import read_shared_state, shared_state_path, write_vscode_integration_state
 from .table_selection import selected_entry_uids
 
 
 APP_NAME = "TAcroMan"
-SETTINGS_FILENAME = "tacroman-settings.json"
-LEGACY_SETTINGS_FILENAME = "acronym-manager-settings.json"
 PROFILE_FILENAME = "tacroman-render-profiles.json"
-APP_STATE_FILENAME = "tacroman-app-state.json"
-LAST_DATABASE_PATH_KEY = "last_database_path"
-LEGACY_DIRECTORY_SETTINGS_FILENAME = ".acronym_manager_settings.json"
 
 
 def _default_database_path() -> Path:
@@ -45,47 +40,30 @@ def _default_database_path() -> Path:
 
 def _app_state_path() -> Path:
     """Return the app-wide state file, independent of any workspace."""
-    return Path.home() / APP_NAME / APP_STATE_FILENAME
+    return shared_state_path()
 
 
 def _stored_database_path(state_path: Path | None = None) -> Path | None:
-    """Return the last usable database saved by the current app version."""
-    value = load_settings(state_path or _app_state_path()).get(LAST_DATABASE_PATH_KEY)
+    """Return the database selected in the shared per-user state."""
+    state = read_shared_state(state_path)
+    value = state.get("databasePath")
     if not isinstance(value, str) or not value.strip():
         return None
     try:
-        candidate = Path(value).expanduser().resolve()
-        return candidate if candidate.is_file() else None
+        return Path(value).expanduser().resolve()
     except OSError:
         return None
-
-
-def _legacy_database_path(settings_path: Path | None = None) -> Path | None:
-    """Migrate the folder remembered by the pre-TAcroMan application."""
-    value = load_settings(settings_path or (Path.home() / LEGACY_DIRECTORY_SETTINGS_FILENAME)).get("last_directory")
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        directory = Path(value).expanduser().resolve()
-        for filename in ("entries.json", "acronyms.json"):
-            candidate = directory / filename
-            if candidate.is_file():
-                return candidate
-    except OSError:
-        pass
-    return None
 
 
 def _startup_database_path(
     database_path: Path | None,
     *,
     state_path: Path | None = None,
-    legacy_settings_path: Path | None = None,
 ) -> Path:
-    """Prefer an explicit CLI path, then the last database, then the default."""
+    """Prefer an explicit CLI path, then shared state, then the first-run default."""
     if database_path is not None:
         return database_path
-    return _stored_database_path(state_path) or _legacy_database_path(legacy_settings_path) or _default_database_path()
+    return _stored_database_path(state_path) or _default_database_path()
 
 
 def _remember_database_path(database_path: Path, *, state_path: Path | None = None) -> None:
@@ -94,9 +72,7 @@ def _remember_database_path(database_path: Path, *, state_path: Path | None = No
         database_path = database_path.expanduser().resolve()
         if not database_path.is_file():
             return
-        settings = load_settings(state_path or _app_state_path())
-        settings[LAST_DATABASE_PATH_KEY] = str(database_path)
-        save_settings(state_path or _app_state_path(), settings)
+        write_vscode_integration_state(database_path, state_path=state_path)
     except OSError:
         # Reopening the last database is a convenience, never a reason to fail a save.
         pass
@@ -142,17 +118,30 @@ class TAcroManApp(tk.Tk):
         self.minsize(1020, 650)
         self.geometry("1220x760")
 
+        shared_state = read_shared_state()
         self.database_path = database_path.expanduser().resolve()
+        shared_matches_database = shared_state.get("databasePath") == str(self.database_path)
+        if self.database_path == _default_database_path() and not self.database_path.exists():
+            save_database(self.database_path, [])
         settings = self._load_workspace_settings(self.database_path)
+        shared_output = shared_state.get("outputPath") if shared_matches_database else None
         self.output_path = (
             output_path.expanduser().resolve()
             if output_path
-            else Path(settings.get("output_path", self.database_path.with_suffix(".tex"))).expanduser()
+            else Path(shared_output or settings.get("output_path", self.database_path.with_suffix(".tex"))).expanduser()
         )
+        stored_output_mode = str(shared_state.get("outputMode", ""))
+        if shared_matches_database and stored_output_mode in {"project", "database", "custom"}:
+            self._output_mode = stored_output_mode
+        else:
+            self._output_mode = "custom" if output_path is not None else "database"
         self.profiles_path = (
             profiles_path.expanduser().resolve()
             if profiles_path
-            else Path(settings.get("profiles_path", self.database_path.parent / PROFILE_FILENAME)).expanduser()
+            else Path(
+                (shared_state.get("profilesPath") if shared_matches_database else None)
+                or settings.get("profiles_path", self.database_path.parent / PROFILE_FILENAME)
+            ).expanduser()
         )
 
         self.entries: list[CommandEntry] = []
@@ -168,25 +157,21 @@ class TAcroManApp(tk.Tk):
         self._last_preview_output_by_profile: dict[str, str] = {}
         self._table_sort_column = "key"
         self._table_sort_reverse = False
+        self._shared_state_signature: tuple[int, int] | None = None
+        self._database_file_signature: tuple[int, int] | None = None
+        self._sync_after_id: str | None = None
+        self._applying_shared_state = False
 
         self.database_path_var = tk.StringVar(value=str(self.database_path))
-
-        # Publish the active database for editor integrations.
-
-        self.database_path_var.trace_add(
-
-            "write",
-
-            lambda *_args: write_vscode_integration_state(self.database_path_var.get()),
-
-        )
-
-        write_vscode_integration_state(self.database_path_var.get())
         self.output_path_var = tk.StringVar(value=str(self.output_path))
         self.search_var = tk.StringVar()
-        self.profile_var = tk.StringVar(value=str(settings.get("selected_profile_id", "acronym-package")))
+        self.profile_var = tk.StringVar(
+            value=str(shared_state.get("selectedProfileId") or settings.get("selected_profile_id", "acronym-package"))
+        )
         self.profile_display_var = tk.StringVar()
-        self.language_var = tk.StringVar(value=normalize_language(str(settings.get("language", DEFAULT_LANGUAGE))))
+        self.language_var = tk.StringVar(
+            value=normalize_language(str(shared_state.get("language") or settings.get("language", DEFAULT_LANGUAGE)))
+        )
         self.output_status_var = tk.StringVar()
 
         self.search_var.trace_add("write", lambda *_: self._refresh_table())
@@ -194,7 +179,11 @@ class TAcroManApp(tk.Tk):
         self._load_workspace(initial=True)
         _remember_database_path(self.database_path)
         self._ui_ready = True
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self._save_workspace_settings()
+        self._database_file_signature = self._file_signature(self.database_path)
+        self._shared_state_signature = self._file_signature(shared_state_path())
+        self._schedule_shared_sync()
+        self.protocol("WM_DELETE_WINDOW", self._close)
 
     @property
     def language(self) -> str:
@@ -203,20 +192,110 @@ class TAcroManApp(tk.Tk):
     def t(self, key: str, **values: object) -> str:
         return translate(self.language, key, **values)
 
-    @staticmethod
-    def _settings_path_for(database_path: Path) -> Path:
-        return database_path.parent / SETTINGS_FILENAME
-
-    @staticmethod
-    def _legacy_settings_path_for(database_path: Path) -> Path:
-        return database_path.parent / LEGACY_SETTINGS_FILENAME
-
     def _load_workspace_settings(self, database_path: Path) -> dict[str, object]:
-        current_path = self._settings_path_for(database_path)
-        if current_path.exists():
-            return load_settings(current_path)
-        legacy_path = self._legacy_settings_path_for(database_path)
-        return load_settings(legacy_path) if legacy_path.exists() else {}
+        shared = read_shared_state()
+        if shared.get("databasePath") == str(database_path.expanduser().resolve()):
+            result: dict[str, object] = {}
+            for source, target in (
+                ("outputPath", "output_path"),
+                ("profilesPath", "profiles_path"),
+                ("selectedProfileId", "selected_profile_id"),
+                ("language", "language"),
+            ):
+                if shared.get(source):
+                    result[target] = shared[source]
+            return result
+        return {}
+
+    @staticmethod
+    def _file_signature(path: Path) -> tuple[int, int] | None:
+        try:
+            stat = path.stat()
+            return stat.st_mtime_ns, stat.st_size
+        except OSError:
+            return None
+
+    def _schedule_shared_sync(self) -> None:
+        if self._sync_after_id is None:
+            self._sync_after_id = self.after(350, self._poll_shared_files)
+
+    def _poll_shared_files(self) -> None:
+        self._sync_after_id = None
+        if not self.winfo_exists():
+            return
+        try:
+            state_signature = self._file_signature(shared_state_path())
+            if state_signature != self._shared_state_signature:
+                self._shared_state_signature = state_signature
+                self._apply_shared_state(read_shared_state())
+
+            database_signature = self._file_signature(self.database_path)
+            if database_signature != self._database_file_signature:
+                self.entries = load_database(self.database_path, language=self.language)
+                self._database_file_signature = database_signature
+                self._refresh_table()
+                self._write_output(show_success=False)
+        except (OSError, ValueError):
+            # A writer may be between its temporary file and atomic replace.
+            # The next poll retries without interrupting the editor workflow.
+            pass
+        finally:
+            self._schedule_shared_sync()
+
+    def _apply_shared_state(self, state: dict[str, Any]) -> None:
+        if self._applying_shared_state:
+            return
+        self._applying_shared_state = True
+        try:
+            database_value = state.get("databasePath")
+            next_database = (
+                Path(database_value).expanduser().resolve()
+                if isinstance(database_value, str) and database_value.strip()
+                else self.database_path
+            )
+            output_value = state.get("outputPath")
+            next_output = (
+                Path(output_value).expanduser().resolve()
+                if isinstance(output_value, str) and output_value.strip()
+                else self.output_path
+            )
+            mode = str(state.get("outputMode", self._output_mode))
+            if mode in {"project", "database", "custom"}:
+                self._output_mode = mode
+
+            database_changed = next_database != self.database_path
+            output_changed = next_output != self.output_path
+            if database_changed:
+                self.database_path = next_database
+                self.output_path = next_output
+                self.database_path_var.set(str(next_database))
+                self.output_path_var.set(str(next_output))
+                profiles_value = state.get("profilesPath")
+                self.profiles_path = (
+                    Path(profiles_value).expanduser().resolve()
+                    if isinstance(profiles_value, str) and profiles_value.strip()
+                    else next_database.parent / PROFILE_FILENAME
+                )
+                if state.get("selectedProfileId"):
+                    self.profile_var.set(str(state["selectedProfileId"]))
+                if state.get("language"):
+                    self.language_var.set(normalize_language(str(state["language"])))
+                self.entries = []
+                self.profiles = []
+                self._load_workspace()
+                self._database_file_signature = self._file_signature(self.database_path)
+            elif output_changed:
+                self.output_path = next_output
+                self.output_path_var.set(str(next_output))
+                self._write_output(show_success=False)
+        finally:
+            self._applying_shared_state = False
+
+    def _close(self) -> None:
+        if self._sync_after_id is not None:
+            self.after_cancel(self._sync_after_id)
+            self._sync_after_id = None
+        self.destroy()
 
     def _build_ui(self) -> None:
         """Rebuild the user interface while retaining unsaved form values."""
@@ -284,12 +363,18 @@ class TAcroManApp(tk.Tk):
         outer.columnconfigure(1, weight=1)
 
         ttk.Label(outer, text=self.t("database_label")).grid(row=0, column=0, sticky="w", padx=(0, 8))
-        ttk.Entry(outer, textvariable=self.database_path_var).grid(row=0, column=1, sticky="ew")
+        database_entry = ttk.Entry(outer, textvariable=self.database_path_var)
+        database_entry.grid(row=0, column=1, sticky="ew")
+        database_entry.bind("<FocusOut>", lambda _event: self._apply_path_entries())
+        database_entry.bind("<Return>", lambda _event: self._apply_path_entries())
         ttk.Button(outer, text=self.t("open"), command=self._choose_database).grid(row=0, column=2, padx=(8, 0))
         ttk.Button(outer, text=self.t("new"), command=self._new_database).grid(row=0, column=3, padx=(6, 0))
 
         ttk.Label(outer, text=self.t("output_label")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(7, 0))
-        ttk.Entry(outer, textvariable=self.output_path_var).grid(row=1, column=1, sticky="ew", pady=(7, 0))
+        output_entry = ttk.Entry(outer, textvariable=self.output_path_var)
+        output_entry.grid(row=1, column=1, sticky="ew", pady=(7, 0))
+        output_entry.bind("<FocusOut>", lambda _event: self._apply_path_entries())
+        output_entry.bind("<Return>", lambda _event: self._apply_path_entries())
         ttk.Button(outer, text=self.t("target"), command=self._choose_output).grid(row=1, column=2, padx=(8, 0), pady=(7, 0))
         ttk.Button(outer, text=self.t("write_now"), command=lambda: self._write_output(show_success=True)).grid(
             row=1, column=3, padx=(6, 0), pady=(7, 0)
@@ -731,8 +816,10 @@ class TAcroManApp(tk.Tk):
 
         # Persist deletion before updating the in-memory/UI state.
         save_database(self.database_path, remaining_entries)
-
         self.entries = remaining_entries
+        self._database_file_signature = self._file_signature(self.database_path)
+        _remember_database_path(self.database_path)
+        self._write_output(show_success=False)
         self._refresh_table()
 
         # Historical TAcroMan versions used slightly different form-clear
@@ -756,6 +843,7 @@ class TAcroManApp(tk.Tk):
             self.database_path = Path(self.database_path_var.get()).expanduser().resolve()
             self.output_path = Path(self.output_path_var.get()).expanduser().resolve()
             save_database(self.database_path, self.entries)
+            self._database_file_signature = self._file_signature(self.database_path)
             _remember_database_path(self.database_path)
             self._save_workspace_settings()
             return self._write_output(show_success=False)
@@ -786,13 +874,54 @@ class TAcroManApp(tk.Tk):
             return False
 
     def _save_workspace_settings(self) -> None:
-        settings = {
-            "output_path": str(self.output_path),
-            "profiles_path": str(self.profiles_path),
-            "selected_profile_id": self.profile_var.get() if self.profiles else "acronym-package",
-            "language": self.language,
-        }
-        save_settings(self._settings_path_for(self.database_path), settings)
+        self._publish_vscode_state()
+
+    def _publish_vscode_state(self) -> None:
+        profile = self._active_profile() if self.profiles else None
+        write_vscode_integration_state(
+            self.database_path,
+            self.output_path,
+            output_mode=self._output_mode,
+            profiles_path=self.profiles_path,
+            selected_profile_id=self.profile_var.get() if self.profiles else "acronym-package",
+            language=self.language,
+            render_profile=profile,
+        )
+        self._shared_state_signature = self._file_signature(shared_state_path())
+
+    def _apply_path_entries(self) -> str:
+        try:
+            next_database = Path(self.database_path_var.get()).expanduser().resolve()
+            next_output = Path(self.output_path_var.get()).expanduser().resolve()
+        except (OSError, ValueError) as error:
+            messagebox.showerror(APP_NAME, self.t("file_write_failed", error=error))
+            return "break"
+
+        database_changed = next_database != self.database_path
+        output_changed = next_output != self.output_path
+        output_followed_database = False
+        if database_changed and not output_changed and self._output_mode == "database":
+            next_output = next_database.with_suffix(".tex")
+            output_changed = True
+            output_followed_database = True
+            self.output_path_var.set(str(next_output))
+        if not database_changed and not output_changed:
+            return "break"
+        if output_changed and not output_followed_database:
+            self._output_mode = "custom"
+        if database_changed:
+            self.database_path = next_database
+            self.output_path = next_output
+            self.profiles_path = next_database.parent / PROFILE_FILENAME
+            self.entries = []
+            self.profiles = []
+            self._load_workspace()
+            self._database_file_signature = self._file_signature(self.database_path)
+        else:
+            self.output_path = next_output
+            self._write_output(show_success=False)
+        self._save_workspace_settings()
+        return "break"
 
     def _choose_database(self) -> None:
         selected = filedialog.askopenfilename(
@@ -805,7 +934,9 @@ class TAcroManApp(tk.Tk):
         settings = self._load_workspace_settings(self.database_path)
         self._ui_ready = False
         self.database_path_var.set(str(self.database_path))
-        self.output_path = Path(settings.get("output_path", self.database_path.with_suffix(".tex"))).expanduser()
+        if self._output_mode != "custom":
+            self._output_mode = "database"
+            self.output_path = Path(settings.get("output_path", self.database_path.with_suffix(".tex"))).expanduser()
         self.output_path_var.set(str(self.output_path))
         self.profiles_path = Path(settings.get("profiles_path", self.database_path.parent / PROFILE_FILENAME)).expanduser()
         self.profile_var.set(str(settings.get("selected_profile_id", "acronym-package")))
@@ -814,6 +945,8 @@ class TAcroManApp(tk.Tk):
         self.profiles = []
         self._load_workspace()
         _remember_database_path(self.database_path)
+        self._save_workspace_settings()
+        self._database_file_signature = self._file_signature(self.database_path)
         self._ui_ready = True
 
     def _new_database(self) -> None:
@@ -827,6 +960,7 @@ class TAcroManApp(tk.Tk):
             return
         self.database_path = Path(selected).expanduser().resolve()
         self.database_path_var.set(str(self.database_path))
+        self._output_mode = "database"
         self.output_path = self.database_path.with_suffix(".tex")
         self.output_path_var.set(str(self.output_path))
         self.profiles_path = self.database_path.parent / PROFILE_FILENAME
@@ -837,6 +971,7 @@ class TAcroManApp(tk.Tk):
         self._start_new_entry()
         try:
             save_database(self.database_path, self.entries)
+            self._database_file_signature = self._file_signature(self.database_path)
             _remember_database_path(self.database_path)
             self._write_output(show_success=False)
             self.output_status_var.set(self.t("new_database_status", path=self.database_path))
@@ -853,6 +988,7 @@ class TAcroManApp(tk.Tk):
         if not selected:
             return
         self.output_path = Path(selected).expanduser().resolve()
+        self._output_mode = "custom"
         self.output_path_var.set(str(self.output_path))
         self._write_output(show_success=False)
 

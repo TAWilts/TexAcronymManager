@@ -1,6 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+
+export type OutputMode = "project" | "database" | "custom";
 
 export interface DesktopLauncher {
   executable: string;
@@ -8,31 +10,43 @@ export interface DesktopLauncher {
 }
 
 export interface DesktopIntegrationState {
+  version?: unknown;
   databasePath?: unknown;
+  outputPath?: unknown;
+  outputMode?: unknown;
+  profilesPath?: unknown;
+  selectedProfileId?: unknown;
+  language?: unknown;
+  renderProfile?: unknown;
   launcher?: unknown;
+  [key: string]: unknown;
 }
 
 export function desktopLaunchArguments(
   launcherArguments: readonly string[],
   extraArguments: readonly string[],
   databasePath?: string,
+  outputPath?: string,
 ): string[] {
   const databaseArguments = databasePath ? ["--database", databasePath] : [];
-  return [...launcherArguments, ...extraArguments, ...databaseArguments];
+  const outputArguments = outputPath ? ["--output", outputPath] : [];
+  return [...launcherArguments, ...extraArguments, ...databaseArguments, ...outputArguments];
+}
+
+export function tacromanUserDirectory(home: string = os.homedir()): string {
+  return path.join(home, "TAcroMan");
 }
 
 export function desktopIntegrationStatePath(
-  platform: NodeJS.Platform = process.platform,
-  env: NodeJS.ProcessEnv = process.env,
+  _platform: NodeJS.Platform = process.platform,
+  _env: NodeJS.ProcessEnv = process.env,
   home: string = os.homedir(),
 ): string {
-  if (platform === "win32" && env.APPDATA) {
-    return path.join(env.APPDATA, "TAcroMan", "vscode-integration.json");
-  }
-  if (platform === "darwin") {
-    return path.join(home, "Library", "Application Support", "TAcroMan", "vscode-integration.json");
-  }
-  return path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "tacroman", "vscode-integration.json");
+  return path.join(tacromanUserDirectory(home), "state.json");
+}
+
+export function defaultDatabasePath(home: string = os.homedir()): string {
+  return path.join(tacromanUserDirectory(home), "entries.json");
 }
 
 function objectState(raw: unknown): DesktopIntegrationState | undefined {
@@ -42,18 +56,25 @@ function objectState(raw: unknown): DesktopIntegrationState | undefined {
   return raw as DesktopIntegrationState;
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 export function databasePathFromIntegrationState(raw: unknown): string | undefined {
-  const state = objectState(raw);
-  const value = state?.databasePath;
-  if (typeof value !== "string" || !value.trim()) {
-    return undefined;
-  }
-  return value.trim();
+  return nonEmptyString(objectState(raw)?.databasePath);
+}
+
+export function outputPathFromIntegrationState(raw: unknown): string | undefined {
+  return nonEmptyString(objectState(raw)?.outputPath);
+}
+
+export function outputModeFromIntegrationState(raw: unknown): OutputMode | undefined {
+  const mode = objectState(raw)?.outputMode;
+  return mode === "project" || mode === "database" || mode === "custom" ? mode : undefined;
 }
 
 export function launcherFromIntegrationState(raw: unknown): DesktopLauncher | undefined {
-  const state = objectState(raw);
-  const launcher = state?.launcher;
+  const launcher = objectState(raw)?.launcher;
   if (!launcher || typeof launcher !== "object" || Array.isArray(launcher)) {
     return undefined;
   }
@@ -68,23 +89,73 @@ export function launcherFromIntegrationState(raw: unknown): DesktopLauncher | un
     return undefined;
   }
 
-  return {
-    executable: candidate.executable.trim(),
-    args: [...args],
-  };
+  return { executable: candidate.executable.trim(), args: [...args] };
 }
 
-async function readDesktopIntegrationState(): Promise<unknown | undefined> {
+async function readJsonFile(filePath: string): Promise<DesktopIntegrationState | undefined> {
   try {
-    const text = await readFile(desktopIntegrationStatePath(), "utf8");
-    return JSON.parse(text) as unknown;
+    return objectState(JSON.parse(await readFile(filePath, "utf8")) as unknown);
   } catch {
     return undefined;
   }
 }
 
+export async function readDesktopIntegrationState(
+  statePath: string = desktopIntegrationStatePath(),
+): Promise<DesktopIntegrationState | undefined> {
+  return readJsonFile(statePath);
+}
+
+async function atomicWriteJson(filePath: string, value: unknown): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await rename(temporary, filePath);
+}
+
+export async function updateDesktopIntegrationState(
+  changes: Partial<DesktopIntegrationState>,
+  statePath: string = desktopIntegrationStatePath(),
+): Promise<DesktopIntegrationState> {
+  const current = await readDesktopIntegrationState(statePath) ?? {};
+  const next: DesktopIntegrationState = { ...current, ...changes, version: 1 };
+  delete next.last_database_path;
+  await atomicWriteJson(statePath, next);
+  return next;
+}
+
+export async function ensureDesktopIntegrationState(
+  projectOutputPath?: string,
+  statePath: string = desktopIntegrationStatePath(),
+  initialDatabasePath: string = defaultDatabasePath(),
+): Promise<DesktopIntegrationState> {
+  await mkdir(path.dirname(statePath), { recursive: true });
+  const state = await readDesktopIntegrationState(statePath) ?? {};
+
+  const databasePath = databasePathFromIntegrationState(state) ?? initialDatabasePath;
+  try {
+    await stat(databasePath);
+  } catch {
+    await mkdir(path.dirname(databasePath), { recursive: true });
+    await atomicWriteJson(databasePath, { schema_version: 2, entries: [] });
+  }
+
+  const existingOutput = outputPathFromIntegrationState(state);
+  const outputMode = outputModeFromIntegrationState(state)
+    ?? (projectOutputPath ? "project" : "database");
+  const outputPath = outputMode === "project" && projectOutputPath
+    ? projectOutputPath
+    : existingOutput ?? projectOutputPath ?? databasePath.replace(/\.json$/i, ".tex");
+
+  return updateDesktopIntegrationState({ ...state, databasePath, outputPath, outputMode }, statePath);
+}
+
 export async function readDesktopDatabasePath(): Promise<string | undefined> {
   return databasePathFromIntegrationState(await readDesktopIntegrationState());
+}
+
+export async function readDesktopOutputPath(): Promise<string | undefined> {
+  return outputPathFromIntegrationState(await readDesktopIntegrationState());
 }
 
 export async function readDesktopLauncher(): Promise<DesktopLauncher | undefined> {

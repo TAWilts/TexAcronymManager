@@ -180,17 +180,17 @@ Install **TAcroMan** from the Visual Studio Code Extensions view.
 
 ### 2. Create or select an acronym database
 
-There are two ways to get started.
-
-**Starting a new database (recommended for most users)**
+On first use, TAcroMan creates `~/TAcroMan/entries.json` and keeps the shared
+UI/extension state in `~/TAcroMan/state.json`. This state file is the only
+source used for remembered paths; older integration files, obsolete VS Code
+path settings, and workspace database discovery are deliberately ignored.
 
 1. Open the Command Palette with `Ctrl+Shift+P` and run
-   **TAcroMan: Open TAcroMan** or click on the top right **Open TAcroMan**.
+   **TAcroMan: Open TAcroMan** or click **Open TAcroMan** in the sidebar.
 2. Create your first acronym entry and save it in the desktop application.
-3. Open the Command Palette and run **TAcroMan: Reload Database**.
 
-The extension then uses the database just created in TAcroMan. Completion and
-the sidebar are available immediately.
+The extension reloads automatically. The generated `entries.tex` defaults to
+the current VS Code project folder and is updated after every database change.
 
 **Using an existing database**
 
@@ -210,8 +210,7 @@ synchronized between their computers using a suitable method:
   and avoid editing the database concurrently on multiple computers.
 
 After synchronizing the file, point TAcroMan to the local copy. In the VS Code
-extension, use **TAcroMan: Select Database** or configure
-`tacroman.databasePath`. In the desktop application, select the corresponding
+extension, use **TAcroMan: Select Database**. In the desktop application, select the corresponding
 database path in the upper-right corner or use the database-selection command.
 Once the path is set, all authors can use the same acronym database.
 
@@ -239,10 +238,11 @@ or open the TAcroMan sidebar and browse the database directly.
 
 ## 🔄 Live database synchronization
 
-The active `acronyms.json` file is watched automatically.
+The active JSON database and the shared `~/TAcroMan/state.json` file are watched automatically.
 
-When an acronym is added, edited, or deleted in TAcroMan, the VS Code extension
-updates its database cache and sidebar automatically.
+When an acronym is added, edited, or deleted in either frontend (or directly in
+the JSON file), the other frontend updates automatically and regenerates the
+selected output file.
 
 This also works when the database is located outside the current VS Code
 workspace.
@@ -286,15 +286,6 @@ For most users, the default settings should work without modification.
 
 <details>
 <summary><strong>Show advanced settings</strong></summary>
-
-### `tacroman.databasePath`
-
-Optional explicit path to an `acronyms.json` file.
-
-If left empty, TAcroMan first tries to use the database published by the desktop
-application and then falls back to workspace-based discovery.
-
----
 
 ### `tacroman.latexCommands`
 
@@ -359,15 +350,6 @@ stored in the database.
 
 Defines LaTeX commands whose braced arguments should not be interpreted as
 normal prose during acronym detection.
-
----
-
-### `tacroman.executablePath`
-
-Optional explicit path to the TAcroMan desktop executable.
-
-Leave this empty to use the launcher automatically published by the desktop
-application.
 
 ---
 
@@ -497,6 +479,4 @@ bash build-vscode-extension.sh
 ```
 
 For desktop integration, install and start TAcroMan with `bash install-linux.sh`
-and `bash run-tacroman.sh`. Integration state is read from
-`$XDG_CONFIG_HOME/tacroman/vscode-integration.json`, falling back to
-`~/.config/tacroman/vscode-integration.json`.
+and `bash run-tacroman.sh`. Both frontends use `~/TAcroMan/state.json`.

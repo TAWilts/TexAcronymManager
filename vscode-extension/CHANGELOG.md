@@ -1,5 +1,22 @@
 # Change Log
 
+## 0.5.8
+
+- Use only `~/TAcroMan/state.json` for remembered database/output paths and
+  stop importing legacy integration files, obsolete VS Code path settings, and
+  legacy desktop directory settings. The desktop launcher is also read only
+  from this shared state instead of VS Code settings or `PATH`.
+- Use `~/TAcroMan/entries.json` as the one first-run database default shared by
+  the desktop application and VS Code extension.
+
+## 0.5.6
+
+- Store database/output selection in shared `~/TAcroMan/state.json` instead of
+  workspace settings and synchronize it live with the desktop application.
+- Default generated `entries.tex` to the current VS Code project and regenerate
+  output automatically after database changes.
+- Add sidebar and Command Palette selection for the generated TeX output.
+
 ## 0.5.1
 
 - Add a `VERSION`-file packaging workflow that automatically selects the next

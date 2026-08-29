@@ -1,23 +1,16 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
 
-from tacroman.vscode_integration import detect_editor_launcher, vscode_integration_state_path
+from tacroman.vscode_integration import detect_editor_launcher, shared_state_path
 
 
 class LinuxCompatibilityTests(unittest.TestCase):
-    def test_xdg_config_path(self) -> None:
+    def test_shared_state_is_in_the_tacroman_user_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            with patch("tacroman.vscode_integration.sys.platform", "linux"):
-                with patch.dict(os.environ, {"XDG_CONFIG_HOME": directory}, clear=False):
-                    self.assertEqual(
-                        vscode_integration_state_path(),
-                        Path(directory) / "tacroman" / "vscode-integration.json",
-                    )
+            self.assertEqual(shared_state_path(home=Path(directory)), Path(directory) / "TAcroMan" / "state.json")
 
     def test_venv_console_launcher(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

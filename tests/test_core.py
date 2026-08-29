@@ -372,6 +372,15 @@ class TAcroManTests(unittest.TestCase):
 
             self.assertEqual(_startup_database_path(None, state_path=state), database.resolve())
 
+    def test_startup_keeps_shared_database_path_when_database_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            database = directory / "missing" / "entries.json"
+            state = directory / "state.json"
+            state.write_text(json.dumps({"databasePath": str(database)}), encoding="utf-8")
+
+            self.assertEqual(_startup_database_path(None, state_path=state), database.resolve())
+
     def test_legacy_profile_loads_as_one_generic_command(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "profiles.json"

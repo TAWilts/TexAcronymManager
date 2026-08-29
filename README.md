@@ -226,6 +226,7 @@ src/tacroman/
   profiles.py     Profile-schema loading and migration
   rendering.py    Profile-based output generation
   storage.py      Atomic JSON and text persistence
+  vscode_integration.py  Shared state in ~/TAcroMan/state.json
 ~~~
 
 ## Visual Studio Code extension
@@ -241,7 +242,14 @@ The extension reads the same `acronyms.json` database and provides:
 - lookup by short form and long form;
 - lightweight diagnostics for known acronyms written as plain text;
 - Quick Fixes such as `AUV` -> `\ac{AUV}` and `AUVs` -> `\acp{AUV}`;
-- commands for database selection/reload and launching TAcroMan.
+- commands for database/output selection, live reload, and launching TAcroMan.
+
+The desktop app and extension use `~/TAcroMan/state.json` as their single
+authoritative source for shared paths and frontend state. They do not import
+paths from older application files, VS Code settings, or workspace discovery.
+On a genuine first run, both frontends use `~/TAcroMan/entries.json`; generated
+`entries.tex` defaults to the current VS Code project folder and stays up to
+date whenever the JSON database changes.
 
 It runs alongside LaTeX Workshop and does not patch or depend on LaTeX
 Workshop internals. For development and packaging instructions, see
@@ -259,6 +267,6 @@ bash run-tacroman.sh
 
 The main system dependency is Python's Tk binding (`python3-tk` on
 Debian/Ubuntu, `python3-tkinter` on Fedora, or `tk` on Arch Linux). The VS Code
-bridge uses `$XDG_CONFIG_HOME/tacroman` or `~/.config/tacroman` and detects the
-`tacroman` launcher inside a virtual environment. Ubuntu CI checks Tk startup,
+bridge uses `~/TAcroMan/state.json` and detects the `tacroman` launcher inside a
+virtual environment. Ubuntu CI checks Tk startup,
 the Python tests, and the VS Code extension tests.

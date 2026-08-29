@@ -337,34 +337,29 @@ class TAcroManCodeActionProvider implements vscode.CodeActionProvider {
 async function openTAcroMan(databases: DatabaseManager): Promise<void> {
   const document = vscode.window.activeTextEditor?.document;
   const database = await databases.getDatabaseUri(document);
+  const output = await databases.getOutputUri();
 
   const configuration = vscode.workspace.getConfiguration("tacroman", document?.uri);
-  const configuredExecutable = configuration.get<string>("executablePath", "").trim();
   const extraArguments = configuration.get<string[]>("launchArguments", []);
-
-  let executable = configuredExecutable;
-  let launcherArguments: string[] = [];
-
-  if (!executable) {
-    const desktopLauncher = await readDesktopLauncher();
-    if (desktopLauncher) {
-      executable = desktopLauncher.executable;
-      launcherArguments = desktopLauncher.args;
-    } else {
-      executable = "tacroman";
-    }
+  const desktopLauncher = await readDesktopLauncher();
+  if (!desktopLauncher) {
+    vscode.window.showErrorMessage(
+      "TAcroMan launcher is not registered in ~/TAcroMan/state.json. Start the desktop application once first.",
+    );
+    return;
   }
 
   // The desktop application can create or select a database itself. Only pass
   // a database path when the extension already knows one.
   const args = desktopLaunchArguments(
-    launcherArguments,
+    desktopLauncher.args,
     extraArguments,
     database?.fsPath,
+    output?.fsPath,
   );
 
   try {
-    const child = spawn(executable, args, {
+    const child = spawn(desktopLauncher.executable, args, {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
@@ -379,8 +374,9 @@ async function openTAcroMan(databases: DatabaseManager): Promise<void> {
   }
 }
 
-export function activate(context: vscode.ExtensionContext): void {
-  const databases = new DatabaseManager(context);
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  const databases = new DatabaseManager();
+  await databases.initialize();
   const diagnostics = new PlainAcronymDiagnostics(databases);
   context.subscriptions.push(databases, diagnostics);
   registerTAcroManSidebar(context, databases);
@@ -403,6 +399,7 @@ export function activate(context: vscode.ExtensionContext): void {
       { providedCodeActionKinds: TAcroManCodeActionProvider.providedCodeActionKinds },
     ),
     vscode.commands.registerCommand("tacroman.selectDatabase", () => databases.selectDatabase()),
+    vscode.commands.registerCommand("tacroman.selectOutput", () => databases.selectOutput()),
     vscode.commands.registerCommand("tacroman.reload", () => {
       databases.clearCache();
       vscode.window.setStatusBarMessage("TAcroMan: database cache cleared", 3000);
