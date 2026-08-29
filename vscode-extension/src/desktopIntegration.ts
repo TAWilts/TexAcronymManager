@@ -12,6 +12,15 @@ export interface DesktopIntegrationState {
   launcher?: unknown;
 }
 
+export function desktopLaunchArguments(
+  launcherArguments: readonly string[],
+  extraArguments: readonly string[],
+  databasePath?: string,
+): string[] {
+  const databaseArguments = databasePath ? ["--database", databasePath] : [];
+  return [...launcherArguments, ...extraArguments, ...databaseArguments];
+}
+
 export function desktopIntegrationStatePath(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,

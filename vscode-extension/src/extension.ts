@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 import { findCompletionContext } from "./context";
 import { matchesQuery, rankCandidatesForQuery } from "./database";
 import { DatabaseManager } from "./databaseManager";
-import { readDesktopLauncher } from "./desktopIntegration";
+import { desktopLaunchArguments, readDesktopLauncher } from "./desktopIntegration";
 import { registerTAcroManSidebar } from "./sidebar";
 import { registerCheckAcronymsCommand } from "./acronymCheckCommand";
 import { registerDatabaseWatcher } from "./databaseWatcher";
@@ -337,16 +337,6 @@ class TAcroManCodeActionProvider implements vscode.CodeActionProvider {
 async function openTAcroMan(databases: DatabaseManager): Promise<void> {
   const document = vscode.window.activeTextEditor?.document;
   const database = await databases.getDatabaseUri(document);
-  if (!database) {
-    const action = await vscode.window.showWarningMessage(
-      "TAcroMan: No database is selected or discoverable.",
-      "Select database",
-    );
-    if (action === "Select database") {
-      await databases.selectDatabase();
-    }
-    return;
-  }
 
   const configuration = vscode.workspace.getConfiguration("tacroman", document?.uri);
   const configuredExecutable = configuration.get<string>("executablePath", "").trim();
@@ -365,7 +355,13 @@ async function openTAcroMan(databases: DatabaseManager): Promise<void> {
     }
   }
 
-  const args = [...launcherArguments, ...extraArguments, "--database", database.fsPath];
+  // The desktop application can create or select a database itself. Only pass
+  // a database path when the extension already knows one.
+  const args = desktopLaunchArguments(
+    launcherArguments,
+    extraArguments,
+    database?.fsPath,
+  );
 
   try {
     const child = spawn(executable, args, {
