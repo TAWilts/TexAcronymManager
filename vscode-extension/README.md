@@ -174,38 +174,28 @@ content.
 
 ### 1. Install the extension
 
-Open the Extensions view in Visual Studio Code:
-
-```text
-Ctrl+Shift+X
-```
-
-Search for:
-
-```text
-TAcroMan
-```
-
-and install the extension.
-
-For local development, a packaged `.vsix` can also be installed using:
-
-**Extensions → … → Install from VSIX…**
+Install **TAcroMan** from the Visual Studio Code Extensions view.
 
 ---
 
-### 2. Select an acronym database
+### 2. Create or select an acronym database
 
-TAcroMan uses a JSON database containing the available acronyms.
+There are two ways to get started.
 
-You can either:
+**Starting a new database (recommended for most users)**
 
-- select a database from VS Code using  
-  **TAcroMan: Select Database**, or
-- use the database currently selected in the TAcroMan desktop application.
+1. Open the Command Palette with `Ctrl+Shift+P` and run
+   **TAcroMan: Open TAcroMan** or click on the top right **Open TAcroMan**.
+2. Create your first acronym entry and save it in the desktop application.
+3. Open the Command Palette and run **TAcroMan: Reload Database**.
 
-Once a database is active, the sidebar and completion features are available
-immediately.
+The extension then uses the database just created in TAcroMan. Completion and
+the sidebar are available immediately.
+
+**Using an existing database**
+
+Open the existing database in the TAcroMan desktop application, then run
+**TAcroMan: Select Database** from the Command Palette in VS Code.
 
 ### Working with multiple authors
 

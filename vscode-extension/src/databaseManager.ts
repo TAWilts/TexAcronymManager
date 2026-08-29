@@ -52,6 +52,19 @@ export class DatabaseManager implements vscode.Disposable {
   }
 
   async selectDatabase(): Promise<vscode.Uri | undefined> {
+    // A database created or opened by the desktop application can be outside
+    // the current workspace. Prefer that published path for the first run.
+    const desktopPath = await readDesktopDatabasePath();
+    if (desktopPath) {
+      const desktopUri = vscode.Uri.file(desktopPath);
+      try {
+        await vscode.workspace.fs.stat(desktopUri);
+        return this.selectUri(desktopUri);
+      } catch {
+        // Ignore stale desktop state and continue with workspace discovery.
+      }
+    }
+
     const choices = await this.discoverDatabases();
     if (!choices.length) {
       vscode.window.showWarningMessage("TAcroMan: No acronym database was found in this workspace.");
@@ -70,18 +83,22 @@ export class DatabaseManager implements vscode.Disposable {
       return undefined;
     }
 
-    this.selectedDatabase = picked.uri;
+    return this.selectUri(picked.uri);
+  }
+
+  private async selectUri(uri: vscode.Uri): Promise<vscode.Uri> {
+    this.selectedDatabase = uri;
     this.cache = undefined;
     const target = vscode.workspace.workspaceFolders?.length
       ? vscode.ConfigurationTarget.Workspace
       : vscode.ConfigurationTarget.Global;
     await vscode.workspace
       .getConfiguration("tacroman")
-      .update("databasePath", picked.uri.fsPath, target);
+      .update("databasePath", uri.fsPath, target);
     await this.context.workspaceState.update("tacroman.selectedDatabase", undefined);
     this.databaseChangedEmitter.fire();
-    vscode.window.setStatusBarMessage(`TAcroMan: ${vscode.workspace.asRelativePath(picked.uri, false)}`, 4000);
-    return picked.uri;
+    vscode.window.setStatusBarMessage(`TAcroMan: ${vscode.workspace.asRelativePath(uri, false)}`, 4000);
+    return uri;
   }
 
   async getDatabaseUri(activeDocument?: vscode.TextDocument): Promise<vscode.Uri | undefined> {
