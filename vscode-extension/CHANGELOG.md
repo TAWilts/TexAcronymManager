@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.7.3
+
+- Add contextual, bilingual help tooltips to every application-owned popup and
+  tool window.
+- Close the previously expanded desktop menu whenever another menu is opened.
+
 ## 0.7.2
 
 - Move profile editing, citation migration, and reference auditing completely

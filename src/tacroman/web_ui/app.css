@@ -178,7 +178,8 @@ textarea.field-control { min-height: 92px; resize: vertical; }
   background: var(--vscode-editor-background, #fff);
 }
 .info-dialog::backdrop { background: rgba(0, 0, 0, .45); }
-.info-dialog h2 { margin-top: 0; }
+.dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.dialog-header h2 { margin: 0; }
 .info-content { line-height: 1.5; white-space: pre-line; }
 .dialog-actions { display: flex; justify-content: flex-end; margin-top: 22px; }
 
@@ -203,6 +204,7 @@ textarea.field-control { min-height: 92px; resize: vertical; }
   background: var(--vscode-sideBar-background, #f8fafc);
 }
 .tool-header h2 { margin: 0; font-size: 18px; }
+.tool-header-actions { display: flex; align-items: center; gap: 6px; }
 .icon-button {
   width: 30px;
   height: 30px;
@@ -214,6 +216,45 @@ textarea.field-control { min-height: 92px; resize: vertical; }
   background: transparent;
 }
 .icon-button:hover { background: var(--vscode-toolbar-hoverBackground, #e5e7eb); }
+.window-help { position: relative; }
+.help-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  color: var(--vscode-descriptionForeground, #5f6a79);
+  background: transparent;
+}
+.help-button:hover, .help-button:focus-visible {
+  outline: none;
+  color: var(--vscode-foreground, #1f2937);
+  background: var(--vscode-toolbar-hoverBackground, #e5e7eb);
+}
+.help-button:focus-visible { box-shadow: 0 0 0 1px var(--vscode-focusBorder, #007fd4); }
+.help-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  display: none;
+  width: min(380px, calc(100vw - 64px));
+  padding: 10px 12px;
+  border: 1px solid var(--vscode-menu-border, #c7cbd1);
+  border-radius: 5px;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, .24);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: pre-line;
+  color: var(--vscode-menu-foreground, #1f2937);
+  background: var(--vscode-menu-background, #fff);
+  pointer-events: none;
+}
+.window-help:hover .help-tooltip, .window-help:focus-within .help-tooltip { display: block; }
 .tool-body { min-height: 0; overflow: auto; padding: 18px; }
 .tool-grid { display: grid; gap: 14px; }
 .tool-grid.two-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }

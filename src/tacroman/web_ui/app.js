@@ -38,6 +38,9 @@
       helpTitle: "TAcroMan help",
       helpText: "Select or create a database, choose a profile and edit entries in the form. Changes are written to the JSON database and generated output. Profile and bibliography tools are available from the desktop menu.",
       aboutText: "TAcroMan manages profile-defined LaTeX commands from one shared database.",
+      windowHelp: "What is this window for?",
+      generalHelpTooltip: "This window gives you a brief overview of the normal workflow. Read the instructions, close the window, then select a database and profile to start editing.",
+      aboutHelpTooltip: "This window explains the purpose of TAcroMan and the shared database model. No action is required.",
       databaseLabel: "Database:", outputLabel: "Output:", selectDatabase: "Select database",
       selectOutput: "Select output", desktopApp: "Desktop app", searchEntries: "Search entries",
       conflict: "The database changed outside this editor.", reload: "Reload", newEntry: "New entry",
@@ -49,6 +52,9 @@
       importing: "Importing…",
       profileEditorTitle: "Edit profiles", citationToolTitle: "Migrate citation keys",
       auditToolTitle: "Audit references", profileFile: "Profile file", duplicateProfile: "Duplicate profile",
+      profileEditorHelp: "Use this window to define how TAcroMan stores and renders command types.\n\n1. Select an existing profile or duplicate one.\n2. Edit its metadata, output settings, and command schema.\n3. Save the profile. TAcroMan validates it and immediately regenerates the output with the selected profile.",
+      citationToolHelp: "Use this window when citation keys changed between two bibliography files.\n\n1. Select the old and new bibliography.\n2. Analyse the proposed mappings and correct them if necessary.\n3. Add the TeX files or a project folder.\n4. Keep backups enabled and update the TeX files.",
+      auditToolHelp: "Use this window to check which bibliography entries are used in a LaTeX project.\n\n1. Select the project folder.\n2. Select one of the discovered bibliography files.\n3. Run the audit.\n4. Review used, unused, and unknown citation keys; use the search field to narrow the results.",
       profileId: "Profile ID", profileName: "Name", description: "Description", preamble: "Preamble hint",
       header: "Header", footer: "Footer", separator: "Separator", sortBy: "Sort by", escapeMode: "Escape mode",
       usageTemplate: "Usage template", commandSchema: "Command schema (JSON)", saveProfile: "Save profile",
@@ -73,6 +79,9 @@
       helpTitle: "TAcroMan-Hilfe",
       helpText: "Wähle oder erstelle eine Datenbank, wähle ein Profil und bearbeite die Einträge in der Eingabemaske. Änderungen werden in die JSON-Datenbank und die generierte Ausgabedatei geschrieben. Profil- und Literaturwerkzeuge findest du im Desktop-Menü.",
       aboutText: "TAcroMan verwaltet profildefinierte LaTeX-Befehle aus einer gemeinsamen Datenbank.",
+      windowHelp: "Wofür ist dieses Fenster da?",
+      generalHelpTooltip: "Dieses Fenster gibt dir einen kurzen Überblick über den normalen Arbeitsablauf. Lies die Hinweise, schließe das Fenster und wähle danach eine Datenbank und ein Profil aus, um mit der Bearbeitung zu beginnen.",
+      aboutHelpTooltip: "Dieses Fenster erklärt den Zweck von TAcroMan und das gemeinsame Datenbankmodell. Du musst hier nichts einstellen.",
       databaseLabel: "Datenbank:", outputLabel: "Ausgabe:", selectDatabase: "Datenbank auswählen",
       selectOutput: "Ausgabe auswählen", desktopApp: "Desktop-App", searchEntries: "Einträge durchsuchen",
       conflict: "Die Datenbank wurde außerhalb dieses Editors geändert.", reload: "Neu laden", newEntry: "Neuer Eintrag",
@@ -84,6 +93,9 @@
       importing: "Import läuft…",
       profileEditorTitle: "Profile bearbeiten", citationToolTitle: "Zitationsschlüssel migrieren",
       auditToolTitle: "Referenzen prüfen", profileFile: "Profildatei", duplicateProfile: "Profil duplizieren",
+      profileEditorHelp: "In diesem Fenster legst du fest, wie TAcroMan Befehlstypen speichert und ausgibt.\n\n1. Wähle ein vorhandenes Profil oder dupliziere es.\n2. Bearbeite Metadaten, Ausgabeoptionen und das Befehlsschema.\n3. Speichere das Profil. TAcroMan prüft es und erzeugt die Ausgabe sofort mit dem gewählten Profil neu.",
+      citationToolHelp: "Dieses Fenster verwendest du, wenn sich Zitationsschlüssel zwischen zwei Bibliographien geändert haben.\n\n1. Wähle die alte und die neue Bibliographie.\n2. Analysiere die vorgeschlagenen Zuordnungen und korrigiere sie bei Bedarf.\n3. Füge die TeX-Dateien oder einen Projektordner hinzu.\n4. Lasse die Sicherungen aktiviert und aktualisiere die TeX-Dateien.",
+      auditToolHelp: "Mit diesem Fenster prüfst du, welche Bibliographieeinträge in einem LaTeX-Projekt verwendet werden.\n\n1. Wähle den Projektordner.\n2. Wähle eine der gefundenen Bibliographiedateien.\n3. Starte die Prüfung.\n4. Kontrolliere verwendete, ungenutzte und unbekannte Zitationsschlüssel; mit der Suche grenzt du die Ergebnisse ein.",
       profileId: "Profil-ID", profileName: "Name", description: "Beschreibung", preamble: "Präambel-Hinweis",
       header: "Kopf", footer: "Fuß", separator: "Trennzeichen", sortBy: "Sortierung", escapeMode: "Maskierung",
       usageTemplate: "Verwendungsvorlage", commandSchema: "Befehlsschema (JSON)", saveProfile: "Profil speichern",
@@ -133,9 +145,17 @@
     for (const menu of document.querySelectorAll(".menu[open]")) menu.removeAttribute("open");
   }
 
-  function showInfo(title, content) {
+  function configureWindowHelp(button, tooltip, helpKey) {
+    const label = text("windowHelp");
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    tooltip.textContent = text(helpKey);
+  }
+
+  function showInfo(title, content, helpKey) {
     elements.infoTitle.textContent = title;
     elements.infoContent.textContent = content;
+    configureWindowHelp(elements.infoHelp, elements.infoHelpTooltip, helpKey);
     elements.infoDialog.showModal();
   }
 
@@ -155,8 +175,9 @@
     return { wrapper, control };
   }
 
-  function openTool(titleKey) {
+  function openTool(titleKey, helpKey) {
     elements.toolTitle.textContent = text(titleKey);
+    configureWindowHelp(elements.toolHelp, elements.toolHelpTooltip, helpKey);
     if (!elements.toolDialog.open) elements.toolDialog.showModal();
   }
 
@@ -171,7 +192,7 @@
     if (!selected) return;
     profileEditorState.originalId = selected.id;
     profileEditorState.editing = JSON.parse(JSON.stringify(selected));
-    openTool("profileEditorTitle");
+    openTool("profileEditorTitle", "profileEditorHelp");
     elements.toolBody.replaceChildren();
 
     const top = el("div", "tool-row");
@@ -266,7 +287,7 @@
 
   function renderCitationTool() {
     if (!citationState) return;
-    openTool("citationToolTitle");
+    openTool("citationToolTitle", "citationToolHelp");
     elements.toolBody.replaceChildren();
     const grid = el("div", "tool-grid two-columns");
     const bibs = el("section", "tool-section");
@@ -393,7 +414,7 @@
 
   function renderAuditTool() {
     if (!auditState) return;
-    openTool("auditToolTitle");
+    openTool("auditToolTitle", "auditToolHelp");
     elements.toolBody.replaceChildren();
     const controls = el("section", "tool-section");
     for (const [label, target, property] of [
@@ -618,7 +639,7 @@
       "desktop-menubar", "menu-open-database", "menu-new-database", "menu-import-tex", "menu-write-output",
       "menu-exit", "menu-edit-profile", "menu-select-profiles", "menu-citation-migration", "menu-reference-audit",
       "menu-language-de", "menu-language-en", "menu-help", "menu-about", "info-dialog", "info-title", "info-content",
-      "tool-dialog", "tool-title", "tool-body", "tool-close",
+      "info-help", "info-help-tooltip", "tool-dialog", "tool-title", "tool-body", "tool-close", "tool-help", "tool-help-tooltip",
     ]) elements[id.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] = document.getElementById(id);
 
     elements.search.addEventListener("input", renderList);
@@ -666,12 +687,20 @@
     elements.menuReferenceAudit.addEventListener("click", openAuditTool);
     elements.menuLanguageDe.addEventListener("click", () => host.postMessage({ type: "setLanguage", language: "de" }));
     elements.menuLanguageEn.addEventListener("click", () => host.postMessage({ type: "setLanguage", language: "en" }));
-    elements.menuHelp.addEventListener("click", () => showInfo(text("helpTitle"), text("helpText")));
-    elements.menuAbout.addEventListener("click", () => showInfo("TAcroMan", text("aboutText")));
+    elements.menuHelp.addEventListener("click", () => showInfo(text("helpTitle"), text("helpText"), "generalHelpTooltip"));
+    elements.menuAbout.addEventListener("click", () => showInfo("TAcroMan", text("aboutText"), "aboutHelpTooltip"));
     elements.toolClose.addEventListener("click", () => elements.toolDialog.close());
     elements.desktopMenubar.addEventListener("click", (event) => {
       if (event.target.closest("button")) closeMenus();
     });
+    for (const menu of elements.desktopMenubar.querySelectorAll(".menu")) {
+      menu.addEventListener("toggle", () => {
+        if (!menu.open) return;
+        for (const other of elements.desktopMenubar.querySelectorAll(".menu[open]")) {
+          if (other !== menu) other.removeAttribute("open");
+        }
+      });
+    }
     document.addEventListener("click", (event) => {
       if (!event.target.closest(".menu")) closeMenus();
     });

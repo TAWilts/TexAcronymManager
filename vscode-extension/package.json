@@ -2,7 +2,7 @@
   "name": "tacroman-vscode",
   "displayName": "TAcroMan",
   "description": "Smart LaTeX acronym completion, plain-text detection, interactive replacement, and TAcroMan database integration.",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "publisher": "tawilts",
   "license": "MIT",
   "engines": {
