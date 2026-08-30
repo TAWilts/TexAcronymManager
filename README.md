@@ -18,6 +18,12 @@ The Web desktop menu exposes database creation, TeX import, output,
 profile editing, citation-key migration, reference auditing, language, and
 help actions. All tools run inside the shared Web interface.
 
+> **Download:** [Latest TAcroMan release for Windows and Linux](https://github.com/TAWilts/TexAcronymManager/releases/latest)
+>
+> Open the release's **Assets** section and download the `windows-x64.zip` or
+> `linux-x64.tar.gz` archive. GitHub Packages is not used because it has no
+> generic package format for desktop executables.
+
 ## Development transparency
 
 TAcroMan was developed in an iterative collaboration with **ChatGPT 5.6 Terra
@@ -197,7 +203,7 @@ Requirements: Python 3.10 or later. The installation pulls in pywebview; on
 Windows its Chromium renderer uses the Microsoft Edge WebView2 Runtime.
 
 For a released build, download the archive for your platform from the
-corresponding GitHub Release:
+[latest GitHub Release](https://github.com/TAWilts/TexAcronymManager/releases/latest):
 
 - `TAcroMan-<version>-windows-x64.zip`: extract it and start
   `TAcroMan/TAcroMan.exe`.

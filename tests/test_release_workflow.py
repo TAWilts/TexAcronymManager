@@ -46,6 +46,13 @@ class ReleaseWorkflowTests(unittest.TestCase):
         assert project_version is not None and package_version is not None
         self.assertEqual(project_version.group(1), package_version.group(1))
 
+    def test_readme_links_to_the_latest_release_assets(self) -> None:
+        readme = (self.root / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("https://github.com/TAWilts/TexAcronymManager/releases/latest", readme)
+        self.assertIn("windows-x64.zip", readme)
+        self.assertIn("linux-x64.tar.gz", readme)
+
 
 if __name__ == "__main__":
     unittest.main()
