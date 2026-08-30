@@ -9,7 +9,7 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
   exit 1
 fi
 
-if command -v pkg-config >/dev/null 2>&1 && ! pkg-config --exists gtk+-3.0 webkit2gtk-4.1; then
+if ! "$PYTHON" -c "import gi; gi.require_version('Gtk', '3.0'); gi.require_version('WebKit2', '4.1'); from gi.repository import Gtk, WebKit2" >/dev/null 2>&1; then
   cat <<'EOF'
 ERROR: GTK 3 or WebKit2GTK 4.1 is missing.
 
@@ -24,9 +24,14 @@ fi
 
 if [ ! -x "$VENV/bin/python" ]; then
   echo "[1/3] Creating virtual environment..."
-  "$PYTHON" -m venv "$VENV"
+  "$PYTHON" -m venv --system-site-packages "$VENV"
 else
   echo "[1/3] Virtual environment already exists."
+  if ! grep -Eq '^include-system-site-packages = true' "$VENV/pyvenv.cfg"; then
+    echo "ERROR: $VENV cannot access the distribution-provided GTK bindings."
+    echo "Remove this virtual environment and run install-linux.sh again."
+    exit 1
+  fi
 fi
 
 echo "[2/3] Updating pip..."

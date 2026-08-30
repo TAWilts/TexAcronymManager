@@ -286,6 +286,8 @@ bash run-tacroman.sh
 ```
 
 On Debian/Ubuntu the native dependencies are `python3-gi`, `python3-gi-cairo`,
-`gir1.2-gtk-3.0`, and `gir1.2-webkit2-4.1`. The VS Code bridge uses
-`~/TAcroMan/state.json` and detects the `tacroman` launcher inside a virtual
-environment. The legacy Tkinter command additionally needs `python3-tk`.
+`gir1.2-gtk-3.0`, and `gir1.2-webkit2-4.1`. The installer creates the virtual
+environment with `--system-site-packages` so these distribution-provided GTK
+bindings remain available without compiling PyGObject through pip. The VS Code
+bridge uses `~/TAcroMan/state.json` and detects the `tacroman` launcher inside a
+virtual environment. The legacy Tkinter command additionally needs `python3-tk`.
