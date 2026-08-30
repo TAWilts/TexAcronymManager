@@ -1,46 +1,75 @@
-name: Create Windows release
+name: Build release executables
 
-run-name: Release TAcroMan ${{ inputs.version }}
+run-name: Build TAcroMan ${{ github.event.release.tag_name }}
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Version without the leading v (for example 0.3.1)
-        required: true
-        type: string
-      prerelease:
-        description: Mark this as a pre-release
-        default: false
-        required: true
-        type: boolean
+  release:
+    types: [published]
 
-# The release job alone receives write access, and only when it is started
-# manually from the default branch.
+# Executable archives are attached to the GitHub Release. GitHub Packages does
+# not provide a generic registry for ZIP or tar.gz application bundles.
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build and publish Windows release
-    runs-on: windows-latest
+  validate:
+    name: Validate release and run tests
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
-      - name: Require the default branch
-        shell: pwsh
-        run: |
-          $defaultBranch = "${{ github.event.repository.default_branch }}"
-          if ($env:GITHUB_REF_NAME -ne $defaultBranch) {
-            throw "Run this workflow from '$defaultBranch', not '$env:GITHUB_REF_NAME'."
-          }
-
-      - name: Check out source
+      - name: Check out the release tag
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - name: Install TAcroMan
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Verify release version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags must use vMAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH." >&2
+            exit 1
+          fi
+          python -c "import sys, tomllib, tacroman; from pathlib import Path; expected=sys.argv[1]; project=tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version']; actual=tacroman.__version__; errors=[] if expected == project == actual else [f'Version mismatch: release={expected}, pyproject.toml={project}, tacroman={actual}']; errors and sys.exit(errors[0])" "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+  build-windows:
+    name: Build Windows x64
+    needs: validate
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          architecture: x64
 
       - name: Install build dependencies
         run: |
@@ -48,90 +77,132 @@ jobs:
           python -m pip install -e .
           python -m pip install "pyinstaller>=6,<7"
 
-      - name: Verify the release version
-        shell: pwsh
-        run: |
-          $requestedVersion = "${{ inputs.version }}".Trim()
-          if ([string]::IsNullOrWhiteSpace($requestedVersion) -or $requestedVersion.StartsWith("v")) {
-            throw "Enter a version without a leading v, for example 0.3.1."
-          }
-
-          $projectText = Get-Content -Raw pyproject.toml
-          $projectMatch = [regex]::Match($projectText, '(?m)^version\s*=\s*"([^"]+)"\s*$')
-          if (-not $projectMatch.Success) {
-            throw "Could not read project.version from pyproject.toml."
-          }
-          $projectVersion = $projectMatch.Groups[1].Value
-          $packageVersion = (python -c "from tacroman import __version__; print(__version__)" ).Trim()
-
-          if ($requestedVersion -ne $projectVersion -or $requestedVersion -ne $packageVersion) {
-            throw "Version mismatch: requested=$requestedVersion, pyproject.toml=$projectVersion, tacroman=$packageVersion. Update both project version declarations before releasing."
-          }
-
-      - name: Run unit tests
-        run: python -m unittest discover -s tests -v
-
-      - name: Build the Windows app
+      - name: Build Windows application
         run: >
           python -m PyInstaller --noconfirm --clean --windowed
           --name TAcroMan --paths src --collect-data tacroman run.py
 
-      - name: Smoke-test the bundled application
+      - name: Smoke-test Windows executable
         shell: pwsh
         run: |
           $appDirectory = Join-Path $PWD "dist\TAcroMan"
           $executable = Join-Path $appDirectory "TAcroMan.exe"
-          if (-not (Test-Path $executable)) {
+          if (-not (Test-Path -LiteralPath $executable)) {
             throw "PyInstaller did not create TAcroMan.exe."
           }
-
-          $profiles = Get-ChildItem -Path $appDirectory -Recurse -File -Filter "profiles.json" |
+          $profiles = Get-ChildItem -LiteralPath $appDirectory -Recurse -File -Filter "profiles.json" |
             Where-Object { $_.FullName -match '[\\/]tacroman[\\/]defaults[\\/]profiles\.json$' }
           if (@($profiles).Count -lt 1) {
-            throw "The built application does not contain its bundled profiles.json file."
+            throw "The Windows bundle does not contain the built-in profiles."
           }
-
-          $process = Start-Process -FilePath $executable -ArgumentList "--help" -Wait -PassThru
+          $process = Start-Process -FilePath $executable -ArgumentList "--help" -Wait -PassThru -WindowStyle Hidden
           if ($process.ExitCode -ne 0) {
             throw "TAcroMan.exe --help exited with code $($process.ExitCode)."
           }
 
-      - name: Create release ZIP
-        id: package
+      - name: Create Windows archive
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          $version = "${{ inputs.version }}"
-          $archiveName = "TAcroMan-$version-windows.zip"
+          $archiveName = "TAcroMan-$env:RELEASE_VERSION-windows-x64.zip"
           $packageRoot = Join-Path $PWD "package\TAcroMan"
           New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
           Copy-Item -Path (Join-Path $PWD "dist\TAcroMan\*") -Destination $packageRoot -Recurse -Force
-          Copy-Item -Path README.md, LICENSE -Destination $packageRoot -Force
+          Copy-Item -LiteralPath README.md, LICENSE -Destination $packageRoot -Force
           Compress-Archive -Path $packageRoot -DestinationPath (Join-Path $PWD "package\$archiveName") -Force
-          "archive_name=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Upload release build as workflow artifact
+      - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: TAcroMan-${{ inputs.version }}-windows
-          path: package/${{ steps.package.outputs.archive_name }}
+          name: release-windows-x64
+          path: package/TAcroMan-${{ needs.validate.outputs.version }}-windows-x64.zip
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
-      - name: Create GitHub release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build-linux:
+    name: Build Linux x64
+    needs: validate
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install GTK and WebKitGTK
         run: |
-          $version = "${{ inputs.version }}"
-          $tag = "v$version"
-          $asset = Join-Path $PWD "package\TAcroMan-$version-windows.zip"
-          $arguments = @(
-            "release", "create", $tag, $asset,
-            "--title", "TAcroMan $version",
-            "--target", $env:GITHUB_SHA,
-            "--generate-notes"
-          )
-          if ("${{ inputs.prerelease }}" -eq "true") {
-            $arguments += "--prerelease"
-          }
-          gh @arguments
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 xvfb
+
+      - name: Install build dependencies
+        run: |
+          python3 -m venv --system-site-packages .venv-build
+          .venv-build/bin/python -m pip install --upgrade pip
+          .venv-build/bin/python -m pip install -e .
+          .venv-build/bin/python -m pip install "pyinstaller>=6,<7"
+          .venv-build/bin/python -c "import gi; gi.require_version('Gtk', '3.0'); gi.require_version('WebKit2', '4.1'); from gi.repository import Gtk, WebKit2"
+
+      - name: Build Linux application
+        run: >
+          .venv-build/bin/python -m PyInstaller --noconfirm --clean
+          --name TAcroMan --paths src --collect-data tacroman
+          --hidden-import webview.platforms.gtk run.py
+
+      - name: Smoke-test Linux executable
+        run: |
+          test -x dist/TAcroMan/TAcroMan
+          test -f dist/TAcroMan/_internal/tacroman/defaults/profiles.json
+          dist/TAcroMan/TAcroMan --help
+          set +e
+          timeout 10s xvfb-run -a dist/TAcroMan/TAcroMan
+          status=$?
+          set -e
+          if [ "$status" -ne 124 ]; then
+            echo "The Linux GUI exited unexpectedly with status $status." >&2
+            exit 1
+          fi
+
+      - name: Create Linux archive
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          archive="TAcroMan-$RELEASE_VERSION-linux-x64.tar.gz"
+          mkdir -p package/TAcroMan
+          cp -a dist/TAcroMan/. package/TAcroMan/
+          cp README.md LICENSE package/TAcroMan/
+          tar -C package -czf "package/$archive" TAcroMan
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-x64
+          path: package/TAcroMan-${{ needs.validate.outputs.version }}-linux-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Attach executables to GitHub Release
+    needs: [validate, build-windows, build-linux]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download completed builds
+        uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          path: package
+          merge-multiple: true
+
+      - name: Create SHA-256 checksums
+        working-directory: package
+        run: sha256sum TAcroMan-* > SHA256SUMS.txt
+
+      - name: Upload assets to the published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" package/* --clobber

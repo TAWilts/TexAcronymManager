@@ -196,8 +196,16 @@ the existing acronym file or the main .tex file containing the definitions.
 Requirements: Python 3.10 or later. The installation pulls in pywebview; on
 Windows its Chromium renderer uses the Microsoft Edge WebView2 Runtime.
 
-On Windows, extract the ZIP archive and double-click start_windows.bat.
-Alternatively, run:
+For a released build, download the archive for your platform from the
+corresponding GitHub Release:
+
+- `TAcroMan-<version>-windows-x64.zip`: extract it and start
+  `TAcroMan/TAcroMan.exe`.
+- `TAcroMan-<version>-linux-x64.tar.gz`: extract it and start
+  `TAcroMan/TAcroMan` after installing the GTK/WebKitGTK dependencies listed
+  below.
+
+Alternatively, run directly from the source tree:
 
 ~~~bash
 python run.py
@@ -221,7 +229,6 @@ python -m unittest discover -s tests -v
 ~~~text
 src/tacroman/
   web_app.py      Native pywebview host for the shared frontend
-  app.py          Legacy Tkinter UI during feature migration
   i18n.py         German and English user-interface texts
   importing.py    Targeted TeX import helpers
   model.py        Generic entries, validation, and comparison logic
@@ -281,3 +288,19 @@ environment with `--system-site-packages` so these distribution-provided GTK
 bindings remain available without compiling PyGObject through pip. The VS Code
 bridge uses `~/TAcroMan/state.json` and detects the `tacroman` launcher inside a
 virtual environment.
+
+## Release builds
+
+Publishing a GitHub Release with a tag such as `v1.0.0` automatically builds
+the Windows x64 and Linux x64 application bundles. The tag version must match
+both `project.version` in `pyproject.toml` and `tacroman.__version__`. After both
+platform builds and smoke tests succeed, the workflow attaches these files to
+the Release:
+
+- the Windows ZIP archive;
+- the Linux tar.gz archive;
+- `SHA256SUMS.txt` for integrity verification.
+
+The archives are also retained temporarily as GitHub Actions artifacts. They
+are Release assets rather than GitHub Packages because GitHub Packages has no
+generic registry for executable ZIP or tar.gz bundles.

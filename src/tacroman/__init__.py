@@ -3,4 +3,4 @@
 from .model import Acronym, CommandEntry
 
 __all__ = ["Acronym", "CommandEntry"]
-__version__ = "0.4.0"
+__version__ = "1.0.0"
