@@ -13,6 +13,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_published_release_builds_windows_and_linux(self) -> None:
         self.assertIn("release:\n    types: [published]", self.workflow)
+        self.assertIn("workflow_dispatch:", self.workflow)
+        self.assertIn("github.event.release.tag_name || inputs.tag", self.workflow)
         self.assertIn("runs-on: windows-latest", self.workflow)
         self.assertIn("runs-on: ubuntu-22.04", self.workflow)
         self.assertIn("python -m PyInstaller", self.workflow)
@@ -23,7 +25,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("needs: [validate, build-windows, build-linux]", self.workflow)
         self.assertIn("actions/download-artifact@v5", self.workflow)
         self.assertIn("sha256sum TAcroMan-* > SHA256SUMS.txt", self.workflow)
-        self.assertIn('gh release upload "$RELEASE_TAG" package/* --clobber', self.workflow)
+        self.assertIn(
+            'gh release upload "$RELEASE_TAG" package/* --clobber --repo "$GITHUB_REPOSITORY"',
+            self.workflow,
+        )
         self.assertIn("permissions:\n  contents: read", self.workflow)
         self.assertIn("permissions:\n      contents: write", self.workflow)
         self.assertNotIn("gh release create", self.workflow)
