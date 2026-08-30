@@ -378,8 +378,10 @@ Desktop app ───────┘
 ```
 
 The desktop host is installed with the Python `tacroman` package and uses
-pywebview for its native window. `tacroman-tk` remains available temporarily
-for advanced tools that have not yet moved to the shared interface.
+pywebview for its native window. Its desktop-only menu includes the former
+file, profile, tool, language, and help actions. The profile editor, citation
+migration, and reference audit open as targeted classic tool windows until
+those larger dialogs have moved completely into the shared interface.
 
 The database remains a normal JSON file, so the extension does not lock you into
 a proprietary document format.

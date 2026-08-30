@@ -41,8 +41,8 @@ def main() -> None:
             height=600,
             minimized=True,
         )
-        api.window = window
-        window.events.closed += api.stop
+        api._attach_window(window)
+        window.events.closed += api._stop
 
         def verify() -> None:
             try:
@@ -57,11 +57,11 @@ def main() -> None:
                         "})"
                     )
                     current = json.loads(value) if isinstance(value, str) else {}
-                    if current.get("status") == "Ready":
+                    if current.get("status") in {"Ready", "Bereit"}:
                         result.update(current)
                         break
                     time.sleep(0.25)
-                if result.get("status") != "Ready":
+                if result.get("status") not in {"Ready", "Bereit"}:
                     raise RuntimeError(f"Shared UI did not become ready: {current}")
             except BaseException as error:  # pragma: no cover - smoke-test handoff
                 failures.append(error)

@@ -17,6 +17,7 @@ type SnapshotReason = "initial" | "mutation" | "external" | "selection";
 
 interface ManagerSnapshot {
   hostKind: "vscode";
+  language: "de" | "en";
   databasePath: string;
   outputPath?: string;
   revision: string;
@@ -244,6 +245,7 @@ export class TAcroManManagerPanel implements vscode.Disposable {
     ]);
     return {
       hostKind: "vscode",
+      language: state?.language === "de" ? "de" : "en",
       databasePath: database.fsPath,
       outputPath: outputPathFromIntegrationState(state),
       revision: content.revision,

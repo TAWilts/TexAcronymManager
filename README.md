@@ -14,9 +14,12 @@ independent command types, their fields, comparison rules, and the generated
 TeX output. The project is available at
 [TAWilts/TexAcronymManager](https://github.com/TAWilts/TexAcronymManager).
 
-The former Tkinter interface remains temporarily available as `tacroman-tk` for
-advanced tools that are still being transferred, including profile editing and
-specialized imports.
+The Web desktop menu exposes the complete former menu structure. Database
+creation, TeX import, output, profile-file, language, and help actions run in
+the Web application. Profile editing, citation-key migration, and reference
+auditing currently open directly as targeted classic tool windows. The full
+former Tkinter interface remains available as `tacroman-tk` during this final
+dialog migration.
 
 ## Development transparency
 
@@ -264,8 +267,9 @@ date whenever the JSON database changes.
 
 **Open TAcroMan** opens the integrated Webview manager and therefore works
 without a desktop installation. The desktop command launches the same shared
-interface in a native pywebview window. The legacy Tkinter application remains
-available as `tacroman-tk` during the remaining feature migration.
+interface in a native pywebview window. Its restored menu opens the remaining
+profile and bibliography dialogs directly as classic tool windows. The full
+Tkinter application remains available as `tacroman-tk` during their migration.
 
 It runs alongside LaTeX Workshop and does not patch or depend on LaTeX
 Workshop internals. For development and packaging instructions, see

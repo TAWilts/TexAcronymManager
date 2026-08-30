@@ -16,6 +16,8 @@ class WebAppTests(unittest.TestCase):
 
         self.assertIn("<style>", document)
         self.assertIn("const queuedDesktopMessages", document)
+        self.assertIn('id="desktop-menubar"', document)
+        self.assertIn("height: 100vh", document)
         self.assertNotIn("{{STYLE_URI}}", document)
         self.assertNotIn("{{SCRIPT_URI}}", document)
         self.assertNotIn("Content-Security-Policy", document)
@@ -141,6 +143,42 @@ class WebAppTests(unittest.TestCase):
             self.assertEqual(snapshot["profile"]["id"], "acro-package")
             self.assertIn("\\DeclareAcronym", selected_output.read_text(encoding="utf-8"))
 
+    def test_controller_creates_databases_imports_tex_and_runs_classic_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.json"
+            created = root / "created.json"
+            imported_tex = root / "existing.tex"
+            imported_tex.write_text(
+                "\\acro{AUV}{autonomous underwater vehicle}\n\\acro{DVL}{Doppler velocity log}\n",
+                encoding="utf-8",
+            )
+            launched: list[tuple[str, Path, Path, Path]] = []
+            controller = WebAppController(
+                first,
+                root / "first.tex",
+                state_path=root / "state.json",
+                choose_new_database=lambda _current: created,
+                choose_import_tex=lambda _current: imported_tex,
+                launch_legacy_tool=lambda action, database, output, profiles: launched.append(
+                    (action, database, output, profiles)
+                ),
+            )
+
+            controller.handle_message({"type": "newDatabase"})
+            controller.handle_message({
+                "type": "importTex",
+                "mode": "merge",
+                "revision": controller.snapshot()["revision"],
+            })
+            controller.handle_message({"type": "setLanguage", "language": "de"})
+            controller.handle_message({"type": "runLegacyTool", "action": "reference-audit"})
+
+            self.assertEqual(controller.snapshot()["databasePath"], str(created.resolve()))
+            self.assertEqual(controller.snapshot()["language"], "de")
+            self.assertEqual([entry.value("short") for entry in load_database(created)], ["AUV", "DVL"])
+            self.assertEqual(launched[0][0], "reference-audit")
+
     def test_polling_applies_database_selection_from_another_frontend(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -176,10 +214,13 @@ class WebAppTests(unittest.TestCase):
                 state_path=root / "state.json",
             )
             window = FakeWindow()
-            api.window = window
+            api._attach_window(window)
 
             api.post_message('{"type":"ready"}')
 
+            self.assertFalse(hasattr(api, "window"))
+            self.assertFalse(hasattr(api, "controller"))
+            self.assertEqual([name for name in dir(api) if not name.startswith("_")], ["post_message"])
             self.assertEqual(len(window.scripts), 1)
             self.assertIn('window.postMessage({"type": "snapshot"', window.scripts[0])
             self.assertIn('"hostKind": "desktop"', window.scripts[0])

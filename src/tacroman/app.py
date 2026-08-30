@@ -1854,10 +1854,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--database", type=Path, help="Path to the JSON command database.")
     parser.add_argument("--output", type=Path, help="Path of the generated output file.")
     parser.add_argument("--profiles", type=Path, help="Optional JSON file with custom command-definition profiles.")
+    parser.add_argument(
+        "--action",
+        choices=("profile-editor", "citation-migration", "reference-audit"),
+        help="Open one classic tool immediately after startup.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     app = TAcroManApp(_startup_database_path(args.database), args.output, args.profiles)
+    if args.action == "profile-editor":
+        app.after_idle(app._open_profile_editor)
+    elif args.action == "citation-migration":
+        app.after_idle(lambda: CitationKeyMigrationDialog(app))
+    elif args.action == "reference-audit":
+        app.after_idle(lambda: ReferenceAuditDialog(app))
     app.mainloop()

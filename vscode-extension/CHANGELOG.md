@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.7.1
+
+- Keep the entry editor stationary while the database list scrolls independently.
+- Restore the desktop menu bar with database creation, TeX import, output,
+  profile, bibliography, language, help, and exit actions.
+- Open the existing profile editor, citation migration, and reference audit as
+  targeted classic tool windows until their larger dialogs are fully ported.
+- Prevent pywebview/debugpy recursion by exposing only the message bridge and
+  keeping the native Window and controller objects private.
+
 ## 0.7.0
 
 - Reuse the same HTML, CSS, and JavaScript manager in VS Code and the native

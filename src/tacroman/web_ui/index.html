@@ -16,45 +16,93 @@
           <select id="profile-select" class="profile-select" aria-label="Render profile"></select>
         </div>
         <div class="paths">
-          <div class="path"><strong>Database:</strong> <span id="database-path">Loading…</span></div>
-          <div class="path"><strong>Output:</strong> <span id="output-path"></span></div>
+          <div class="path"><strong data-text="databaseLabel">Database:</strong> <span id="database-path" data-text="loading">Loading…</span></div>
+          <div class="path"><strong data-text="outputLabel">Output:</strong> <span id="output-path"></span></div>
         </div>
       </div>
       <div class="toolbar">
-        <button id="select-database" class="button secondary" type="button">Select database</button>
-        <button id="select-output" class="button secondary" type="button">Select output</button>
-        <button id="open-desktop" class="button secondary" type="button">Desktop app</button>
+        <button id="select-database" class="button secondary" type="button" data-text="selectDatabase">Select database</button>
+        <button id="select-output" class="button secondary" type="button" data-text="selectOutput">Select output</button>
+        <button id="open-desktop" class="button secondary" type="button" data-text="desktopApp">Desktop app</button>
       </div>
     </header>
+    <nav id="desktop-menubar" class="menubar" aria-label="Desktop application menu" hidden>
+      <details class="menu">
+        <summary data-text="menuFile">File</summary>
+        <div class="menu-popup">
+          <button id="menu-open-database" type="button" data-text="openDatabase">Open database…</button>
+          <button id="menu-new-database" type="button" data-text="newDatabase">New database…</button>
+          <button id="menu-import-tex" type="button" data-text="importTex">Import TeX file…</button>
+          <button id="menu-write-output" type="button" data-text="writeOutput">Write output file</button>
+          <span class="menu-separator"></span>
+          <button id="menu-exit" type="button" data-text="exit">Exit</button>
+        </div>
+      </details>
+      <details class="menu">
+        <summary data-text="menuProfiles">Profiles</summary>
+        <div class="menu-popup">
+          <button id="menu-edit-profile" type="button" data-text="editProfile">Edit active profile…</button>
+          <button id="menu-select-profiles" type="button" data-text="selectProfiles">Choose profile file…</button>
+        </div>
+      </details>
+      <details class="menu">
+        <summary data-text="menuTools">Tools</summary>
+        <div class="menu-popup">
+          <button id="menu-citation-migration" type="button" data-text="citationMigration">Migrate citation keys…</button>
+          <button id="menu-reference-audit" type="button" data-text="referenceAudit">Audit references…</button>
+        </div>
+      </details>
+      <details class="menu">
+        <summary data-text="menuLanguage">Language</summary>
+        <div class="menu-popup">
+          <button id="menu-language-de" type="button">Deutsch</button>
+          <button id="menu-language-en" type="button">English</button>
+        </div>
+      </details>
+      <details class="menu">
+        <summary data-text="menuHelp">Help</summary>
+        <div class="menu-popup">
+          <button id="menu-help" type="button" data-text="help">Help</button>
+          <button id="menu-about" type="button" data-text="about">About TAcroMan</button>
+        </div>
+      </details>
+    </nav>
     <section class="workspace">
       <aside class="browser">
         <div class="search-row">
-          <input id="search" class="search" type="search" placeholder="Search entries" aria-label="Search entries">
+          <input id="search" class="search" type="search" placeholder="Search entries" aria-label="Search entries" data-placeholder="searchEntries">
           <span id="count" class="count"></span>
         </div>
         <div id="entry-list" class="entry-list" role="list"></div>
       </aside>
       <section class="editor">
         <div id="conflict" class="conflict" hidden>
-          The database changed outside this editor.
-          <button id="reload-conflict" class="button secondary" type="button">Reload</button>
+          <span data-text="conflict">The database changed outside this editor.</span>
+          <button id="reload-conflict" class="button secondary" type="button" data-text="reload">Reload</button>
         </div>
         <form id="editor-form">
           <div class="form-heading">
-            <div><h2 id="form-title">New entry</h2><p id="form-description" class="form-description"></p></div>
-            <label class="command-wrap"><span class="field-label">Type</span><select id="command" class="command-select"></select></label>
+            <div><h2 id="form-title" data-text="newEntry">New entry</h2><p id="form-description" class="form-description"></p></div>
+            <label class="command-wrap"><span class="field-label" data-text="type">Type</span><select id="command" class="command-select"></select></label>
           </div>
           <div id="form-fields"></div>
           <div class="form-actions">
-            <button id="save-button" class="button" type="submit">Save</button>
-            <button id="new-button" class="button secondary" type="button">New</button>
-            <button id="delete-button" class="button danger" type="button" hidden>Delete</button>
+            <button id="save-button" class="button" type="submit" data-text="save">Save</button>
+            <button id="new-button" class="button secondary" type="button" data-text="new">New</button>
+            <button id="delete-button" class="button danger" type="button" data-text="delete" hidden>Delete</button>
           </div>
         </form>
       </section>
     </section>
-    <footer id="status" class="statusbar" aria-live="polite">Loading…</footer>
+    <footer id="status" class="statusbar" aria-live="polite" data-text="loading">Loading…</footer>
   </main>
+  <dialog id="info-dialog" class="info-dialog">
+    <form method="dialog">
+      <h2 id="info-title"></h2>
+      <div id="info-content" class="info-content"></div>
+      <div class="dialog-actions"><button class="button" type="submit" data-text="close">Close</button></div>
+    </form>
+  </dialog>
   <script nonce="{{NONCE}}" src="{{SCRIPT_URI}}"></script>
 </body>
 </html>
