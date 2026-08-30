@@ -1,6 +1,6 @@
-"""TAcroMan: a dependency-free manager for profile-defined LaTeX commands."""
+"""TAcroMan: a Web-based manager for profile-defined LaTeX commands."""
 
 from .model import Acronym, CommandEntry
 
 __all__ = ["Acronym", "CommandEntry"]
-__version__ = "0.3.0"
+__version__ = "0.4.0"

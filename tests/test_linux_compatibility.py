@@ -21,6 +21,16 @@ class LinuxCompatibilityTests(unittest.TestCase):
         self.assertIn("python3-gi", workflow)
         self.assertIn("gir1.2-webkit2-4.1", workflow)
 
+    def test_webview_is_the_only_desktop_frontend(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        project = (root / "pyproject.toml").read_text(encoding="utf-8")
+        workflow = (root / ".github" / "workflows" / "linux-compatibility.yml").read_text(encoding="utf-8")
+
+        self.assertNotIn("tacroman-tk", project)
+        self.assertNotIn("python3-tk", workflow)
+        self.assertFalse((root / "src" / "tacroman" / "app.py").exists())
+        self.assertFalse((root / "src" / "tacroman" / "reference_audit_dialog.py").exists())
+
     def test_shared_state_is_in_the_tacroman_user_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(shared_state_path(home=Path(directory)), Path(directory) / "TAcroMan" / "state.json")

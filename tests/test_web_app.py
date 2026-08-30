@@ -143,7 +143,7 @@ class WebAppTests(unittest.TestCase):
             self.assertEqual(snapshot["profile"]["id"], "acro-package")
             self.assertIn("\\DeclareAcronym", selected_output.read_text(encoding="utf-8"))
 
-    def test_controller_creates_databases_imports_tex_and_runs_classic_tools(self) -> None:
+    def test_controller_creates_databases_imports_tex_and_switches_language(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             first = root / "first.json"
@@ -153,16 +153,12 @@ class WebAppTests(unittest.TestCase):
                 "\\acro{AUV}{autonomous underwater vehicle}\n\\acro{DVL}{Doppler velocity log}\n",
                 encoding="utf-8",
             )
-            launched: list[tuple[str, Path, Path, Path]] = []
             controller = WebAppController(
                 first,
                 root / "first.tex",
                 state_path=root / "state.json",
                 choose_new_database=lambda _current: created,
                 choose_import_tex=lambda _current: imported_tex,
-                launch_legacy_tool=lambda action, database, output, profiles: launched.append(
-                    (action, database, output, profiles)
-                ),
             )
 
             controller.handle_message({"type": "newDatabase"})
@@ -172,12 +168,81 @@ class WebAppTests(unittest.TestCase):
                 "revision": controller.snapshot()["revision"],
             })
             controller.handle_message({"type": "setLanguage", "language": "de"})
-            controller.handle_message({"type": "runLegacyTool", "action": "reference-audit"})
 
             self.assertEqual(controller.snapshot()["databasePath"], str(created.resolve()))
             self.assertEqual(controller.snapshot()["language"], "de")
             self.assertEqual([entry.value("short") for entry in load_database(created)], ["AUV", "DVL"])
-            self.assertEqual(launched[0][0], "reference-audit")
+
+    def test_profile_editor_saves_validated_profiles_via_web_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            messages: list[dict[str, object]] = []
+            profiles_path = root / "profiles.json"
+            controller = WebAppController(
+                root / "entries.json",
+                root / "entries.tex",
+                profiles_path,
+                state_path=root / "state.json",
+                emit=messages.append,
+            )
+
+            controller.handle_message({"type": "openProfileEditor"})
+            editor = messages[-1]
+            self.assertEqual(editor["type"], "profileEditor")
+            profile = json.loads(json.dumps(controller.active_profile))
+            profile["name"] = "Edited Web Profile"
+            controller.handle_message({
+                "type": "saveProfile",
+                "originalId": profile["id"],
+                "profile": profile,
+            })
+
+            self.assertTrue(profiles_path.is_file())
+            saved = json.loads(profiles_path.read_text(encoding="utf-8"))
+            self.assertIn("Edited Web Profile", [item["name"] for item in saved])
+            self.assertEqual(messages[-2]["type"], "profileEditor")
+            self.assertEqual(messages[-1]["type"], "snapshot")
+
+    def test_citation_migration_and_reference_audit_use_web_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old_bib = root / "old.bib"
+            new_bib = root / "new.bib"
+            tex = root / "chapter.tex"
+            old_bib.write_text('@article{OldKey, title={A Study}, year={2024}}', encoding="utf-8")
+            new_bib.write_text('@article{NewKey, title={A Study}, year={2024}}', encoding="utf-8")
+            tex.write_text('See \\cite{OldKey}.', encoding="utf-8")
+            messages: list[dict[str, object]] = []
+            controller = WebAppController(
+                root / "entries.json",
+                root / "entries.tex",
+                state_path=root / "state.json",
+                emit=messages.append,
+                choose_tool_paths=lambda target, _current: [root] if target == "auditProject" else [tex],
+            )
+
+            controller.handle_message({"type": "analyseCitations", "oldBib": str(old_bib), "newBib": str(new_bib)})
+            self.assertEqual(messages[-1]["type"], "citationAnalysis")
+            self.assertEqual(messages[-1]["summary"]["changed"], 1)
+            controller.handle_message({
+                "type": "applyCitationMigration",
+                "mapping": {"OldKey": "NewKey"},
+                "paths": [str(tex)],
+                "backup": True,
+            })
+            self.assertIn("\\cite{NewKey}", tex.read_text(encoding="utf-8"))
+            self.assertTrue((root / "chapter.tex.bak").is_file())
+            self.assertEqual(messages[-1]["type"], "citationMigrationResult")
+
+            controller.handle_message({"type": "discoverReferences", "project": str(root)})
+            self.assertIn(str(new_bib.resolve()), messages[-1]["paths"])
+            controller.handle_message({"type": "auditReferences", "project": str(root), "reference": str(new_bib)})
+            self.assertEqual(messages[-1]["type"], "referenceAudit")
+            self.assertEqual(messages[-1]["unknownKeys"], [])
+            self.assertEqual(messages[-1]["usedKeys"], ["NewKey"])
+
+            controller.handle_message({"type": "chooseToolPath", "target": "auditProject"})
+            self.assertEqual(messages[-1], {"type": "toolPaths", "target": "auditProject", "paths": [str(root.resolve())]})
 
     def test_polling_applies_database_selection_from_another_frontend(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

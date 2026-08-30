@@ -21,7 +21,6 @@ Issues = "https://github.com/TAWilts/TexAcronymManager/issues"
 
 [project.scripts]
 tacroman = "tacroman.web_app:main"
-tacroman-tk = "tacroman.app:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

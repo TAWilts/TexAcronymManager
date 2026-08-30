@@ -3,7 +3,6 @@ import tempfile
 import unittest
 
 from tacroman.reference_audit import audit_project, discover_reference_files, find_citation_occurrences
-from tacroman.reference_audit_dialog import _initial_project_directory, _row_matches_search
 
 
 BIB = r'''
@@ -96,26 +95,6 @@ class ReferenceAuditTests(unittest.TestCase):
         shorter, _ = find_citation_occurrences(text, excerpt_radius=20)
         self.assertGreater(len(excerpt), len(shorter[0].excerpt))
         self.assertGreaterEqual(len(excerpt), 100)
-
-    def test_initial_project_directory_uses_generated_file_parent(self) -> None:
-        class Variable:
-            def get(self) -> str:
-                return "/tmp/dissertation/acronyms.tex"
-
-        class App:
-            output_path_var = Variable()
-
-        self.assertEqual(
-            Path(_initial_project_directory(App())),
-            Path("/tmp/dissertation").resolve(),
-)
-    def test_reference_audit_search_matches_terms_across_any_columns(self) -> None:
-        row = ("chapter/navigation.tex", 42, "smithSLAM2024", "Underwater SLAM", "Jane Smith", "sonar excerpt")
-        self.assertTrue(_row_matches_search(row, "slam sonar"))
-        self.assertTrue(_row_matches_search(row, "SMITH 42"))
-        self.assertFalse(_row_matches_search(row, "slam optical"))
-        self.assertTrue(_row_matches_search(row, ""))
-
 
 if __name__ == "__main__":
     unittest.main()

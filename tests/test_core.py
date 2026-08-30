@@ -8,64 +8,12 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from tacroman.app import TAcroManApp, _remember_database_path, _startup_database_path
-from tacroman.i18n import normalize_language, translate
+from tacroman.i18n import translate
 from tacroman.importing import parse_acronym_package, read_tex_file
 from tacroman.model import CommandEntry, command_map, comparison_matches, similarity_matches, validate_entry
 from tacroman.profiles import load_profiles, normalise_profile
 from tacroman.rendering import preview_diff, render, values_for_entry
 from tacroman.storage import load_database, save_database
-
-
-class _StringVariable:
-    """Minimal StringVar substitute for GUI-independent language-switch tests."""
-
-    def __init__(self, value: str) -> None:
-        self.value = value
-
-    def get(self) -> str:
-        return self.value
-
-
-class _StatusVariable:
-    def __init__(self) -> None:
-        self.value = ""
-
-    def set(self, value: str) -> None:
-        self.value = value
-
-
-class _LanguageSwitchHarness:
-    """Exercise language coordination without requiring an active display."""
-
-    language = property(lambda self: normalize_language(self.language_var.get()))
-    _request_language_refresh = TAcroManApp._request_language_refresh
-    _apply_language_refresh = TAcroManApp._apply_language_refresh
-
-    def __init__(self, language: str) -> None:
-        self._ui_ready = True
-        self._language_refresh_after_id: str | None = None
-        self._rendered_language = language
-        self.language_var = _StringVariable(language)
-        self.output_status_var = _StatusVariable()
-        self.idle_callbacks: list[object] = []
-        self.build_count = 0
-        self.save_count = 0
-
-    def after_idle(self, callback: object) -> str:
-        self.idle_callbacks.append(callback)
-        return f"after#{len(self.idle_callbacks)}"
-
-    def _build_ui(self) -> None:
-        self.build_count += 1
-        self._rendered_language = self.language
-
-    def _save_workspace_settings(self) -> None:
-        self.save_count += 1
-
-    @staticmethod
-    def t(key: str, **_values: object) -> str:
-        return key
 
 
 class TAcroManTests(unittest.TestCase):
@@ -260,83 +208,6 @@ class TAcroManTests(unittest.TestCase):
             [("unchanged", "one\n"), ("unchanged", "two\n")],
         )
 
-    def test_table_defaults_to_key_sorting_and_heading_click_toggles_direction(self) -> None:
-        app = object.__new__(TAcroManApp)
-        app.entries = [
-            CommandEntry("acronym", {"short": "DVL", "long": "Doppler velocity log"}),
-            CommandEntry("acroplural", {"key": "AUV", "long_plural": "autonomous underwater vehicles"}),
-            CommandEntry("acronym", {"short": "ADC", "long": "analog to digital converter"}),
-        ]
-        app.search_var = _StringVariable("")
-        app._table_sort_column = "key"
-        app._table_sort_reverse = False
-        app._visible_command_map = lambda: self.commands
-        app._update_table_headings = lambda: None
-        app._refresh_table = lambda: None
-
-        self.assertEqual(
-            [
-                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
-                for entry in TAcroManApp._filtered_entries(app)
-            ],
-            ["ADC", "AUV", "DVL"],
-        )
-        self.assertEqual(
-            [
-                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
-                for entry in TAcroManApp._entries_in_table_order(app)
-            ],
-            ["ADC", "AUV", "DVL"],
-        )
-        self.assertEqual(
-            render(
-                TAcroManApp._entries_in_table_order(app),
-                self.acronym_profile,
-                preserve_input_order=True,
-            ),
-            "\\begin{acronym}\n"
-            "\\acro{ADC}{analog to digital converter}\n"
-            "\\acroplural{AUV}{autonomous underwater vehicles}\n"
-            "\\acro{DVL}{Doppler velocity log}\n\\end{acronym}\n",
-        )
-
-        TAcroManApp._set_table_sort(app, "key")
-        self.assertTrue(app._table_sort_reverse)
-        self.assertEqual(
-            [
-                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
-                for entry in TAcroManApp._filtered_entries(app)
-            ],
-            ["DVL", "AUV", "ADC"],
-        )
-
-    def test_table_order_for_output_keeps_all_entries_when_search_is_active(self) -> None:
-        app = object.__new__(TAcroManApp)
-        app.entries = [
-            CommandEntry("acronym", {"short": "DVL", "long": "Doppler velocity log"}),
-            CommandEntry("acroplural", {"key": "AUV", "long_plural": "autonomous underwater vehicles"}),
-            CommandEntry("acronym", {"short": "ADC", "long": "analog to digital converter"}),
-        ]
-        app.search_var = _StringVariable("DVL")
-        app._table_sort_column = "key"
-        app._table_sort_reverse = False
-        app._visible_command_map = lambda: self.commands
-
-        self.assertEqual(
-            [
-                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
-                for entry in TAcroManApp._filtered_entries(app)
-            ],
-            ["DVL"],
-        )
-        self.assertEqual(
-            [
-                TAcroManApp._entry_key(app, entry, self.commands[entry.command_id])
-                for entry in TAcroManApp._entries_in_table_order(app)
-            ],
-            ["ADC", "AUV", "DVL"],
-        )
-
     def test_legacy_database_loads_and_new_save_migrates(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "acronyms.json"
@@ -360,26 +231,6 @@ class TAcroManTests(unittest.TestCase):
             loaded = load_database(path)
             self.assertEqual(loaded[0].command_id, "macro")
             self.assertEqual(loaded[0].value("body"), "vehicle")
-
-    def test_startup_reopens_the_last_database(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            database = directory / "entries.json"
-            state = directory / "app-state.json"
-            save_database(database, [CommandEntry("macro", {"name": "AUV", "body": "vehicle"})])
-
-            _remember_database_path(database, state_path=state)
-
-            self.assertEqual(_startup_database_path(None, state_path=state), database.resolve())
-
-    def test_startup_keeps_shared_database_path_when_database_is_missing(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            database = directory / "missing" / "entries.json"
-            state = directory / "state.json"
-            state.write_text(json.dumps({"databasePath": str(database)}), encoding="utf-8")
-
-            self.assertEqual(_startup_database_path(None, state_path=state), database.resolve())
 
     def test_legacy_profile_loads_as_one_generic_command(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -435,30 +286,6 @@ class TAcroManTests(unittest.TestCase):
     def test_language_menu_is_translated(self) -> None:
         self.assertEqual(translate("de", "menu_language"), "Sprache")
         self.assertEqual(translate("en", "menu_language"), "Language")
-
-    def test_language_switch_is_deferred_and_safe_to_repeat(self) -> None:
-        app = _LanguageSwitchHarness("en")
-        app.language_var.value = "de"
-        app._request_language_refresh()
-        app._request_language_refresh()
-        self.assertEqual(app.build_count, 0)
-        self.assertEqual(len(app.idle_callbacks), 1)
-
-        app.idle_callbacks.pop()()
-        self.assertEqual(app.build_count, 1)
-        self.assertEqual(app._rendered_language, "de")
-        self.assertEqual(app.save_count, 1)
-
-        app.language_var.value = "en"
-        app._request_language_refresh()
-        self.assertEqual(app.build_count, 1)
-        self.assertEqual(len(app.idle_callbacks), 1)
-
-        app.idle_callbacks.pop()()
-        self.assertEqual(app.build_count, 2)
-        self.assertEqual(app._rendered_language, "en")
-        self.assertEqual(app.save_count, 2)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,12 +14,9 @@ independent command types, their fields, comparison rules, and the generated
 TeX output. The project is available at
 [TAWilts/TexAcronymManager](https://github.com/TAWilts/TexAcronymManager).
 
-The Web desktop menu exposes the complete former menu structure. Database
-creation, TeX import, output, profile-file, language, and help actions run in
-the Web application. Profile editing, citation-key migration, and reference
-auditing currently open directly as targeted classic tool windows. The full
-former Tkinter interface remains available as `tacroman-tk` during this final
-dialog migration.
+The Web desktop menu exposes database creation, TeX import, output,
+profile editing, citation-key migration, reference auditing, language, and
+help actions. All tools run inside the shared Web interface.
 
 ## Development transparency
 
@@ -213,12 +210,6 @@ python -m pip install -e .
 tacroman --database /path/to/entries.json --output /path/to/commands.tex
 ~~~
 
-To open the legacy Tkinter interface during the remaining migration:
-
-~~~bash
-tacroman-tk --database /path/to/entries.json --output /path/to/commands.tex
-~~~
-
 ## Tests
 
 ~~~bash
@@ -267,9 +258,8 @@ date whenever the JSON database changes.
 
 **Open TAcroMan** opens the integrated Webview manager and therefore works
 without a desktop installation. The desktop command launches the same shared
-interface in a native pywebview window. Its restored menu opens the remaining
-profile and bibliography dialogs directly as classic tool windows. The full
-Tkinter application remains available as `tacroman-tk` during their migration.
+interface in a native pywebview window, including its profile and bibliography
+tools.
 
 It runs alongside LaTeX Workshop and does not patch or depend on LaTeX
 Workshop internals. For development and packaging instructions, see
@@ -290,4 +280,4 @@ On Debian/Ubuntu the native dependencies are `python3-gi`, `python3-gi-cairo`,
 environment with `--system-site-packages` so these distribution-provided GTK
 bindings remain available without compiling PyGObject through pip. The VS Code
 bridge uses `~/TAcroMan/state.json` and detects the `tacroman` launcher inside a
-virtual environment. The legacy Tkinter command additionally needs `python3-tk`.
+virtual environment.

@@ -1,12 +1,19 @@
 # Change Log
 
+## 0.7.2
+
+- Move profile editing, citation migration, and reference auditing completely
+  into Web dialogs shared by the desktop interface.
+- Remove the former Tkinter frontend, its launcher, GUI dependency, and
+  frontend-specific tests.
+
 ## 0.7.1
 
 - Keep the entry editor stationary while the database list scrolls independently.
 - Restore the desktop menu bar with database creation, TeX import, output,
   profile, bibliography, language, help, and exit actions.
-- Open the existing profile editor, citation migration, and reference audit as
-  targeted classic tool windows until their larger dialogs are fully ported.
+- Open the specialized profile and bibliography tools through temporary native
+  compatibility dialogs.
 - Prevent pywebview/debugpy recursion by exposing only the message bridge and
   keeping the native Window and controller objects private.
 
@@ -17,8 +24,6 @@
 - Add a pywebview desktop host with native database/output dialogs, atomic
   persistence, generated-output updates, and shared-state synchronization.
 - Add render-profile selection to both Webview hosts.
-- Keep the former Tkinter frontend available as `tacroman-tk` while its
-  remaining specialized tools are migrated.
 
 ## 0.6.2
 

@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 from hashlib import sha256
 from importlib.resources import files
 import json
 from pathlib import Path
-import subprocess
-import sys
 import threading
 from typing import Any, Callable
 
+from .bib_migration import build_key_migration, migrate_tex_files
 from .i18n import DEFAULT_LANGUAGE, normalize_language
 from .importing import parse_acronym_package, read_tex_file
 from .model import CommandEntry, acronym_to_entry, command_map, comparison_matches, validate_entry
-from .profiles import load_profiles
+from .profiles import load_profiles, normalise_profile, save_profiles
+from .reference_audit import audit_project, discover_reference_files
 from .rendering import render
 from .storage import atomic_write_text, load_database, save_database
 from .vscode_integration import read_shared_state, shared_state_path, write_vscode_integration_state
@@ -25,7 +26,7 @@ APP_NAME = "TAcroMan"
 PROFILE_FILENAME = "tacroman-render-profiles.json"
 MessageEmitter = Callable[[dict[str, object]], None]
 PathChooser = Callable[[Path], Path | None]
-LegacyToolLauncher = Callable[[str, Path, Path, Path], None]
+ToolPathChooser = Callable[[str, Path], list[Path]]
 CloseCallback = Callable[[], None]
 
 
@@ -131,7 +132,7 @@ class WebAppController:
         choose_new_database: PathChooser | None = None,
         choose_import_tex: PathChooser | None = None,
         choose_profiles: PathChooser | None = None,
-        launch_legacy_tool: LegacyToolLauncher | None = None,
+        choose_tool_paths: ToolPathChooser | None = None,
         close_app: CloseCallback | None = None,
     ) -> None:
         self.state_path = (state_path or shared_state_path()).expanduser().resolve()
@@ -141,7 +142,7 @@ class WebAppController:
         self.choose_new_database = choose_new_database
         self.choose_import_tex = choose_import_tex
         self.choose_profiles = choose_profiles
-        self.launch_legacy_tool = launch_legacy_tool
+        self.choose_tool_paths = choose_tool_paths
         self.close_app = close_app
         self._lock = threading.RLock()
 
@@ -412,13 +413,163 @@ class WebAppController:
         self._write_output(self._entries())
         self._publish_state()
 
-    def _run_legacy_tool(self, message: dict[str, object]) -> None:
-        action = str(message.get("action") or "")
-        if action not in {"profile-editor", "citation-migration", "reference-audit"}:
-            raise ValueError("The requested desktop tool is not available.")
-        if self.launch_legacy_tool is None:
-            raise ValueError("The classic desktop tools are unavailable in this host.")
-        self.launch_legacy_tool(action, self.database_path, self.output_path, self.profiles_path)
+    def _open_profile_editor(self) -> None:
+        self.emit(
+            {
+                "type": "profileEditor",
+                "profilesPath": str(self.profiles_path),
+                "selectedProfileId": self.selected_profile_id,
+                "profiles": self.profiles,
+            }
+        )
+
+    def _save_profile(self, message: dict[str, object]) -> None:
+        raw_profile = message.get("profile")
+        if not isinstance(raw_profile, dict):
+            raise ValueError("The profile editor did not provide a valid profile.")
+        profile = normalise_profile(raw_profile, language=self.language)
+        original_id = message.get("originalId")
+        original_id = original_id if isinstance(original_id, str) and original_id else None
+        profile_id = str(profile["id"])
+        if original_id != profile_id and any(str(item["id"]) == profile_id for item in self.profiles):
+            raise ValueError(f"A profile with the ID '{profile_id}' already exists.")
+        if original_id is None:
+            self.profiles.append(profile)
+        else:
+            replaced = False
+            updated: list[dict[str, object]] = []
+            for item in self.profiles:
+                if str(item["id"]) == original_id:
+                    updated.append(profile)
+                    replaced = True
+                else:
+                    updated.append(item)
+            if not replaced:
+                raise ValueError("The profile being edited no longer exists.")
+            self.profiles = updated
+        save_profiles(self.profiles_path, self.profiles, language=self.language)
+        self.selected_profile_id = profile_id
+        self._load_profiles()
+        self._write_output(self._entries())
+        self._publish_state()
+        self._open_profile_editor()
+        self._send_snapshot("selection")
+
+    def _choose_tool_path(self, message: dict[str, object]) -> None:
+        target = str(message.get("target") or "")
+        allowed = {"oldBib", "newBib", "texFiles", "texFolder", "auditProject", "auditReference"}
+        if target not in allowed:
+            raise ValueError("The requested file selection is not supported.")
+        if self.choose_tool_paths is None:
+            raise ValueError("Native file selection is unavailable in this host.")
+        paths = self.choose_tool_paths(target, self.database_path.parent)
+        if target == "texFolder" and paths:
+            paths = sorted(paths[0].rglob("*.tex"))
+        clean = [path.expanduser().resolve() for path in paths]
+        self.emit({"type": "toolPaths", "target": target, "paths": [str(path) for path in clean]})
+
+    @staticmethod
+    def _existing_path(raw: object, *, kind: str) -> Path:
+        if not isinstance(raw, str) or not raw.strip():
+            raise ValueError(f"No {kind} was selected.")
+        path = Path(raw).expanduser().resolve()
+        return path
+
+    def _analyse_citations(self, message: dict[str, object]) -> None:
+        old_path = self._existing_path(message.get("oldBib"), kind="old bibliography")
+        new_path = self._existing_path(message.get("newBib"), kind="new bibliography")
+        if not old_path.is_file() or not new_path.is_file():
+            raise ValueError("Please select an existing old and new bibliography file.")
+        report = build_key_migration(
+            old_path.read_text(encoding="utf-8-sig"),
+            new_path.read_text(encoding="utf-8-sig"),
+        )
+        self.emit(
+            {
+                "type": "citationAnalysis",
+                "matches": [asdict(item) for item in report.matches],
+                "summary": {
+                    "changed": report.changed_count,
+                    "unchanged": report.unchanged_count,
+                    "ambiguous": report.ambiguous_count,
+                    "unmatched": report.unmatched_count,
+                },
+            }
+        )
+
+    def _apply_citation_migration(self, message: dict[str, object]) -> None:
+        raw_mapping = message.get("mapping")
+        raw_paths = message.get("paths")
+        if not isinstance(raw_mapping, dict) or not isinstance(raw_paths, list):
+            raise ValueError("The citation migration request is invalid.")
+        mapping = {
+            str(old).strip(): str(new).strip()
+            for old, new in raw_mapping.items()
+            if str(old).strip() and str(new).strip() and str(old).strip() != str(new).strip()
+        }
+        paths = [Path(path).expanduser().resolve() for path in raw_paths if isinstance(path, str)]
+        if not mapping:
+            raise ValueError("Select at least one valid citation-key mapping.")
+        if not paths or any(not path.is_file() or path.suffix.casefold() != ".tex" for path in paths):
+            raise ValueError("Select at least one existing TeX file.")
+        result = migrate_tex_files(paths, mapping, backup=message.get("backup") is not False)
+        self.emit(
+            {
+                "type": "citationMigrationResult",
+                "filesConsidered": result.files_considered,
+                "filesChanged": result.files_changed,
+                "replacements": result.replacements,
+                "changedFiles": [str(path) for path in result.changed_files],
+            }
+        )
+
+    def _discover_references(self, message: dict[str, object]) -> None:
+        project = self._existing_path(message.get("project"), kind="project directory")
+        if not project.is_dir():
+            raise ValueError("The selected project directory does not exist.")
+        references = discover_reference_files(project)
+        self.emit(
+            {
+                "type": "referenceFiles",
+                "project": str(project),
+                "paths": [str(path) for path in references],
+            }
+        )
+
+    def _audit_references(self, message: dict[str, object]) -> None:
+        project = self._existing_path(message.get("project"), kind="project directory")
+        reference = self._existing_path(message.get("reference"), kind="reference file")
+        report = audit_project(project, reference)
+
+        def relative(path: Path) -> str:
+            try:
+                return str(path.relative_to(project))
+            except ValueError:
+                return str(path)
+
+        self.emit(
+            {
+                "type": "referenceAudit",
+                "bibliography": [asdict(item) for item in report.bibliography],
+                "unused": [asdict(item) for item in report.unused],
+                "occurrences": [
+                    {
+                        "path": str(item.path),
+                        "relativePath": relative(item.path),
+                        "line": item.line,
+                        "key": item.key,
+                        "title": item.title,
+                        "author": item.author,
+                        "excerpt": item.excerpt,
+                        "defined": item.defined,
+                    }
+                    for item in report.occurrences
+                ],
+                "unknownKeys": list(report.unknown_keys),
+                "sourceFiles": [str(path) for path in report.source_files],
+                "usedKeys": list(report.used_keys),
+            }
+        )
 
     def _select_profile(self, message: dict[str, object]) -> None:
         profile_id = message.get("profileId")
@@ -477,8 +628,26 @@ class WebAppController:
                     self._set_language(message)
                     self._send_snapshot("selection")
                     return
-                if message_type == "runLegacyTool":
-                    self._run_legacy_tool(message)
+                if message_type == "openProfileEditor":
+                    self._open_profile_editor()
+                    return
+                if message_type == "saveProfile":
+                    self._save_profile(message)
+                    return
+                if message_type == "chooseToolPath":
+                    self._choose_tool_path(message)
+                    return
+                if message_type == "analyseCitations":
+                    self._analyse_citations(message)
+                    return
+                if message_type == "applyCitationMigration":
+                    self._apply_citation_migration(message)
+                    return
+                if message_type == "discoverReferences":
+                    self._discover_references(message)
+                    return
+                if message_type == "auditReferences":
+                    self._audit_references(message)
                     return
                 if message_type == "exitApp":
                     if self.close_app is not None:
@@ -558,7 +727,7 @@ class DesktopWebApi:
             choose_new_database=self._choose_new_database,
             choose_import_tex=self._choose_import_tex,
             choose_profiles=self._choose_profiles,
-            launch_legacy_tool=self._launch_legacy_tool,
+            choose_tool_paths=self._choose_tool_paths,
             close_app=self._close_app,
             **controller_args,
         )
@@ -640,20 +809,32 @@ class DesktopWebApi:
         )
         return Path(selected[0]) if selected else None
 
-    def _launch_legacy_tool(self, action: str, database: Path, output: Path, profiles: Path) -> None:
-        launcher = Path(sys.executable).with_name("tacroman-tk.exe" if sys.platform == "win32" else "tacroman-tk")
-        command = [str(launcher)] if launcher.is_file() else [
-            sys.executable,
-            "-c",
-            "from tacroman.app import main; main()",
-        ]
-        command.extend([
-            "--database", str(database),
-            "--output", str(output),
-            "--profiles", str(profiles),
-            "--action", action,
-        ])
-        subprocess.Popen(command, close_fds=True)
+    def _choose_tool_paths(self, target: str, current: Path) -> list[Path]:
+        if self._window is None:
+            return []
+        import webview
+
+        if target in {"texFolder", "auditProject"}:
+            selected = self._window.create_file_dialog(
+                webview.FileDialog.FOLDER,
+                directory=str(current),
+                allow_multiple=False,
+            )
+        elif target == "texFiles":
+            selected = self._window.create_file_dialog(
+                webview.FileDialog.OPEN,
+                directory=str(current),
+                allow_multiple=True,
+                file_types=("TeX files (*.tex)", "All files (*.*)"),
+            )
+        else:
+            selected = self._window.create_file_dialog(
+                webview.FileDialog.OPEN,
+                directory=str(current),
+                allow_multiple=False,
+                file_types=("BibTeX files (*.bib;*.bibtex)", "All files (*.*)"),
+            )
+        return [Path(path) for path in selected] if selected else []
 
     def _close_app(self) -> None:
         if self._window is not None:

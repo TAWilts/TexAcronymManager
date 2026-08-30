@@ -79,7 +79,7 @@ jobs:
             throw "The built application does not contain its bundled profiles.json file."
           }
 
-          # --help exits before creating the Tk window, so it is safe on a
+          # --help exits before creating the WebView, so it is safe on a
           # headless CI runner and still proves that the EXE can start.
           $process = Start-Process -FilePath $executable -ArgumentList "--help" -Wait -PassThru
           if ($process.ExitCode -ne 0) {
