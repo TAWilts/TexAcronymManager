@@ -2,7 +2,7 @@
   "name": "tacroman-vscode",
   "displayName": "TAcroMan",
   "description": "Smart LaTeX acronym completion, plain-text detection, interactive replacement, and TAcroMan database integration.",
-  "version": "0.5.8",
+  "version": "0.7.0",
   "publisher": "tawilts",
   "license": "MIT",
   "engines": {
@@ -43,6 +43,7 @@
     "onCommand:tacroman.selectDatabase",
     "onCommand:tacroman.selectOutput",
     "onCommand:tacroman.open",
+    "onCommand:tacroman.openDesktop",
     "onCommand:tacroman.reload",
     "onView:tacroman.acronymExplorer",
     "onCommand:tacroman.sidebar.search",
@@ -62,6 +63,11 @@
       {
         "command": "tacroman.open",
         "title": "TAcroMan: Open TAcroMan",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "tacroman.openDesktop",
+        "title": "TAcroMan: Open Desktop Application",
         "icon": "$(link-external)"
       },
       {
@@ -260,7 +266,8 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
+    "sync:web-ui": "node ./scripts/sync-web-ui.js",
+    "compile": "npm run sync:web-ui && tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node --test out/test/*.test.js",
     "version:prepare": "node ./scripts/prepare-version.js",

@@ -4,9 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tacroman"
-version = "0.3.0"
-description = "A dependency-free desktop manager for profile-defined LaTeX commands"
+version = "0.4.0"
+description = "A desktop and VS Code manager for profile-defined LaTeX commands"
 requires-python = ">=3.10"
+dependencies = [
+  "pywebview>=6.2,<7; platform_system != 'Linux'",
+  "pywebview[gtk]>=6.2,<7; platform_system == 'Linux'",
+]
 license = {text = "MIT"}
 readme = "README.md"
 authors = [{name = "Thomas Wilts"}]
@@ -17,10 +21,11 @@ Repository = "https://github.com/TAWilts/TexAcronymManager"
 Issues = "https://github.com/TAWilts/TexAcronymManager/issues"
 
 [project.scripts]
-tacroman = "tacroman.app:main"
+tacroman = "tacroman.web_app:main"
+tacroman-tk = "tacroman.app:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-tacroman = ["defaults/*.json"]
+tacroman = ["defaults/*.json", "web_ui/*.css", "web_ui/*.html", "web_ui/*.js"]

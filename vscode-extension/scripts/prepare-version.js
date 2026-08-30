@@ -50,10 +50,11 @@ try {
 
   if (fs.existsSync(packageLockFile)) {
     const packageLock = JSON.parse(fs.readFileSync(packageLockFile, 'utf8'));
+    packageLock.version = version;
     if (packageLock.packages?.['']) {
       packageLock.packages[''].version = version;
-      writeIfChanged(packageLockFile, `${JSON.stringify(packageLock, null, 2)}\n`);
     }
+    writeIfChanged(packageLockFile, `${JSON.stringify(packageLock, null, 2)}\n`);
   }
 
   if (version === requestedVersion) {

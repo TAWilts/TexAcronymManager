@@ -124,10 +124,10 @@ There you can:
 - see short and long forms at a glance;
 - insert `\ac{...}` or `\acp{...}`;
 - select or reload the active database;
-- open the TAcroMan desktop application.
+- open the integrated editor to add, edit, or delete entries.
 
-The desktop application can be launched directly from VS Code when you want to
-add, edit, or delete acronym entries.
+The optional desktop application can still be launched through
+**TAcroMan: Open Desktop Application**.
 
 Changes to the database are detected automatically — there is normally no need
 to reload the extension manually.
@@ -187,15 +187,16 @@ path settings, and workspace database discovery are deliberately ignored.
 
 1. Open the Command Palette with `Ctrl+Shift+P` and run
    **TAcroMan: Open TAcroMan** or click **Open TAcroMan** in the sidebar.
-2. Create your first acronym entry and save it in the desktop application.
+2. Create your first acronym entry in the integrated TAcroMan editor and save it.
 
 The extension reloads automatically. The generated `entries.tex` defaults to
 the current VS Code project folder and is updated after every database change.
 
 **Using an existing database**
 
-Open the existing database in the TAcroMan desktop application, then run
-**TAcroMan: Select Database** from the Command Palette in VS Code.
+Run **TAcroMan: Select Database** from the Command Palette or use
+**Select database** in the integrated editor. The separately installed desktop
+application remains available through **TAcroMan: Open Desktop Application**.
 
 ### Working with multiple authors
 
@@ -272,7 +273,8 @@ Open the Command Palette with `Ctrl+Shift+P` and search for **TAcroMan**.
 | Command | Description |
 | --- | --- |
 | **TAcroMan: Check Current File for Acronyms** | Scan the active `.tex` file and review replacements interactively |
-| **TAcroMan: Open TAcroMan** | Open the desktop acronym manager |
+| **TAcroMan: Open TAcroMan** | Open the integrated acronym manager |
+| **TAcroMan: Open Desktop Application** | Open the optional Python desktop application |
 | **TAcroMan: Select Database** | Select an `acronyms.json` database |
 | **TAcroMan: Reload Database** | Force the current database to reload |
 | **TAcroMan: Insert `\ac{...}`** | Insert the selected acronym in singular form |
@@ -366,22 +368,18 @@ Additional arguments passed when launching the desktop application.
 The VS Code extension is part of the larger
 [TAcroMan project](https://github.com/TAWilts/TexAcronymManager).
 
-The desktop application provides a graphical interface for managing the acronym
-database and generating LaTeX acronym definitions.
-
-The VS Code extension focuses on using that database efficiently while writing.
-
-You can therefore use the two together:
+The integrated editor and desktop application render the same shared web
+interface and manage the same JSON database, profiles, and generated output:
 
 ```text
-TAcroMan desktop
-       ↓
- acronyms.json
-       ↓
-VS Code extension
-       ↓
-   LaTeX document
+Integrated editor ─┐
+                   ├─ acronyms.json ─ entries.tex
+Desktop app ───────┘
 ```
+
+The desktop host is installed with the Python `tacroman` package and uses
+pywebview for its native window. `tacroman-tk` remains available temporarily
+for advanced tools that have not yet moved to the shared interface.
 
 The database remains a normal JSON file, so the extension does not lock you into
 a proprietary document format.

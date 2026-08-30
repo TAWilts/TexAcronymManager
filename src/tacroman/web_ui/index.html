@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="{{CSP}}">
+  <link rel="stylesheet" href="{{STYLE_URI}}">
+  <title>TAcroMan</title>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <div class="brand">
+          <h1>TAcroMan</h1>
+          <select id="profile-select" class="profile-select" aria-label="Render profile"></select>
+        </div>
+        <div class="paths">
+          <div class="path"><strong>Database:</strong> <span id="database-path">Loading…</span></div>
+          <div class="path"><strong>Output:</strong> <span id="output-path"></span></div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="select-database" class="button secondary" type="button">Select database</button>
+        <button id="select-output" class="button secondary" type="button">Select output</button>
+        <button id="open-desktop" class="button secondary" type="button">Desktop app</button>
+      </div>
+    </header>
+    <section class="workspace">
+      <aside class="browser">
+        <div class="search-row">
+          <input id="search" class="search" type="search" placeholder="Search entries" aria-label="Search entries">
+          <span id="count" class="count"></span>
+        </div>
+        <div id="entry-list" class="entry-list" role="list"></div>
+      </aside>
+      <section class="editor">
+        <div id="conflict" class="conflict" hidden>
+          The database changed outside this editor.
+          <button id="reload-conflict" class="button secondary" type="button">Reload</button>
+        </div>
+        <form id="editor-form">
+          <div class="form-heading">
+            <div><h2 id="form-title">New entry</h2><p id="form-description" class="form-description"></p></div>
+            <label class="command-wrap"><span class="field-label">Type</span><select id="command" class="command-select"></select></label>
+          </div>
+          <div id="form-fields"></div>
+          <div class="form-actions">
+            <button id="save-button" class="button" type="submit">Save</button>
+            <button id="new-button" class="button secondary" type="button">New</button>
+            <button id="delete-button" class="button danger" type="button" hidden>Delete</button>
+          </div>
+        </form>
+      </section>
+    </section>
+    <footer id="status" class="statusbar" aria-live="polite">Loading…</footer>
+  </main>
+  <script nonce="{{NONCE}}" src="{{SCRIPT_URI}}"></script>
+</body>
+</html>

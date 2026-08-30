@@ -1,5 +1,28 @@
 # Change Log
 
+## 0.7.0
+
+- Reuse the same HTML, CSS, and JavaScript manager in VS Code and the native
+  Python desktop application.
+- Add a pywebview desktop host with native database/output dialogs, atomic
+  persistence, generated-output updates, and shared-state synchronization.
+- Add render-profile selection to both Webview hosts.
+- Keep the former Tkinter frontend available as `tacroman-tk` while its
+  remaining specialized tools are migrated.
+
+## 0.6.2
+
+- Open a profile-driven acronym manager directly inside VS Code instead of
+  requiring the separately installed desktop application.
+- Add, edit, delete, and filter entries in the integrated manager while keeping
+  automatic generated-output updates.
+- Detect database changes made by another frontend before saving so concurrent
+  desktop and Webview edits cannot silently overwrite each other.
+- Keep the existing Python application available through the separate
+  **TAcroMan: Open Desktop Application** command.
+- Store the host-independent Webview assets with the Python package so the same
+  interface can become the desktop frontend during the next migration stage.
+
 ## 0.5.8
 
 - Use only `~/TAcroMan/state.json` for remembered database/output paths and

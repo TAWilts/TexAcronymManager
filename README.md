@@ -1,9 +1,10 @@
 # TAcroMan
 
-TAcroMan is a small, dependency-free desktop application for maintaining
-profile-defined LaTeX command entries. It started as a TeX acronym manager; the
-name remains, but version 0.3 no longer hard-codes an acronym package or any
-relationship between commands.
+TAcroMan is a desktop application and VS Code extension for maintaining
+profile-defined LaTeX command entries. Both frontends use the same web
+interface, JSON database, profiles, and generated output. TAcroMan started as a
+TeX acronym manager; the name remains, but the data model no longer hard-codes
+an acronym package or any relationship between commands.
 
 <img width="610" height="404" alt="Screenshot 2026-08-08 102512" src="https://github.com/user-attachments/assets/adc97f9e-85b3-4c49-b395-5175b0a8d51d" />
 
@@ -13,9 +14,9 @@ independent command types, their fields, comparison rules, and the generated
 TeX output. The project is available at
 [TAWilts/TexAcronymManager](https://github.com/TAWilts/TexAcronymManager).
 
-The graphical interface is available in German and English. Use the
-**Language** menu in the menu bar to switch at any time; the choice is stored
-beside the selected database.
+The former Tkinter interface remains temporarily available as `tacroman-tk` for
+advanced tools that are still being transferred, including profile editing and
+specialized imports.
 
 ## Development transparency
 
@@ -192,8 +193,8 @@ the existing acronym file or the main .tex file containing the definitions.
 
 ## Start
 
-Requirements: Python 3.10 or later with tkinter (included with standard Windows
-Python installations).
+Requirements: Python 3.10 or later. The installation pulls in pywebview; on
+Windows its Chromium renderer uses the Microsoft Edge WebView2 Runtime.
 
 On Windows, extract the ZIP archive and double-click start_windows.bat.
 Alternatively, run:
@@ -209,6 +210,12 @@ python -m pip install -e .
 tacroman --database /path/to/entries.json --output /path/to/commands.tex
 ~~~
 
+To open the legacy Tkinter interface during the remaining migration:
+
+~~~bash
+tacroman-tk --database /path/to/entries.json --output /path/to/commands.tex
+~~~
+
 ## Tests
 
 ~~~bash
@@ -219,7 +226,8 @@ python -m unittest discover -s tests -v
 
 ~~~text
 src/tacroman/
-  app.py          Tkinter UI and generic command tabs
+  web_app.py      Native pywebview host for the shared frontend
+  app.py          Legacy Tkinter UI during feature migration
   i18n.py         German and English user-interface texts
   importing.py    Targeted TeX import helpers
   model.py        Generic entries, validation, and comparison logic
@@ -227,6 +235,7 @@ src/tacroman/
   rendering.py    Profile-based output generation
   storage.py      Atomic JSON and text persistence
   vscode_integration.py  Shared state in ~/TAcroMan/state.json
+  web_ui/         Host-independent Webview frontend assets
 ~~~
 
 ## Visual Studio Code extension
@@ -242,7 +251,9 @@ The extension reads the same `acronyms.json` database and provides:
 - lookup by short form and long form;
 - lightweight diagnostics for known acronyms written as plain text;
 - Quick Fixes such as `AUV` -> `\ac{AUV}` and `AUVs` -> `\acp{AUV}`;
-- commands for database/output selection, live reload, and launching TAcroMan.
+- an integrated manager for adding, editing, deleting, and filtering entries;
+- commands for database/output selection, live reload, and optionally launching
+  the separate desktop application.
 
 The desktop app and extension use `~/TAcroMan/state.json` as their single
 authoritative source for shared paths and frontend state. They do not import
@@ -251,13 +262,18 @@ On a genuine first run, both frontends use `~/TAcroMan/entries.json`; generated
 `entries.tex` defaults to the current VS Code project folder and stays up to
 date whenever the JSON database changes.
 
+**Open TAcroMan** opens the integrated Webview manager and therefore works
+without a desktop installation. The desktop command launches the same shared
+interface in a native pywebview window. The legacy Tkinter application remains
+available as `tacroman-tk` during the remaining feature migration.
+
 It runs alongside LaTeX Workshop and does not patch or depend on LaTeX
 Workshop internals. For development and packaging instructions, see
 `vscode-extension/README.md`.
 
 ## Linux
 
-TAcroMan is a Python/Tkinter application and can run natively on Linux. A source
+TAcroMan uses pywebview with GTK/WebKit2GTK on Linux. A source
 installation can be prepared with:
 
 ```bash
@@ -265,8 +281,7 @@ bash install-linux.sh
 bash run-tacroman.sh
 ```
 
-The main system dependency is Python's Tk binding (`python3-tk` on
-Debian/Ubuntu, `python3-tkinter` on Fedora, or `tk` on Arch Linux). The VS Code
-bridge uses `~/TAcroMan/state.json` and detects the `tacroman` launcher inside a
-virtual environment. Ubuntu CI checks Tk startup,
-the Python tests, and the VS Code extension tests.
+On Debian/Ubuntu the native dependencies are `python3-gi`, `python3-gi-cairo`,
+`gir1.2-gtk-3.0`, and `gir1.2-webkit2-4.1`. The VS Code bridge uses
+`~/TAcroMan/state.json` and detects the `tacroman` launcher inside a virtual
+environment. The legacy Tkinter command additionally needs `python3-tk`.

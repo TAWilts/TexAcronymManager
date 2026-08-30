@@ -7,6 +7,7 @@ import { desktopLaunchArguments, readDesktopLauncher } from "./desktopIntegratio
 import { registerTAcroManSidebar } from "./sidebar";
 import { registerCheckAcronymsCommand } from "./acronymCheckCommand";
 import { registerDatabaseWatcher } from "./databaseWatcher";
+import { TAcroManManagerPanel } from "./managerPanel";
 import {
   buildPlainAcronymCompletionForms,
   buildPlainAcronymForms,
@@ -334,7 +335,7 @@ class TAcroManCodeActionProvider implements vscode.CodeActionProvider {
   }
 }
 
-async function openTAcroMan(databases: DatabaseManager): Promise<void> {
+async function openDesktopTAcroMan(databases: DatabaseManager): Promise<void> {
   const document = vscode.window.activeTextEditor?.document;
   const database = await databases.getDatabaseUri(document);
   const output = await databases.getOutputUri();
@@ -404,7 +405,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       databases.clearCache();
       vscode.window.setStatusBarMessage("TAcroMan: database cache cleared", 3000);
     }),
-    vscode.commands.registerCommand("tacroman.open", () => openTAcroMan(databases)),
+    vscode.commands.registerCommand("tacroman.open", () => TAcroManManagerPanel.show(context, databases)),
+    vscode.commands.registerCommand("tacroman.openDesktop", () => openDesktopTAcroMan(databases)),
   );
 }
 

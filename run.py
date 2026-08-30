@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from tacroman.app import main
+from tacroman.web_app import main
 
 
 if __name__ == "__main__":

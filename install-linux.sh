@@ -9,14 +9,15 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! "$PYTHON" -c "import tkinter" >/dev/null 2>&1; then
+if command -v pkg-config >/dev/null 2>&1 && ! pkg-config --exists gtk+-3.0 webkit2gtk-4.1; then
   cat <<'EOF'
-ERROR: Python's Tk bindings are missing.
+ERROR: GTK 3 or WebKit2GTK 4.1 is missing.
 
-Install them first, for example:
-  Debian/Ubuntu: sudo apt install python3-tk python3-venv
-  Fedora:        sudo dnf install python3-tkinter
-  Arch Linux:    sudo pacman -S tk
+On Debian/Ubuntu install the native WebView dependencies first:
+  sudo apt install python3-venv python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1
+
+On other distributions install GTK 3, PyGObject, and WebKit2GTK 4.1 using the
+distribution package manager.
 EOF
   exit 1
 fi
