@@ -6,6 +6,7 @@ import unittest
 
 from tacroman.vscode_integration import (
     detect_editor_launcher,
+    ensure_installation_id,
     read_shared_state,
     write_vscode_integration_state,
 )
@@ -18,24 +19,35 @@ class VSCodeIntegrationTests(unittest.TestCase):
             state_path = root / "TAcroMan" / "state.json"
             state_path.parent.mkdir()
             state_path.write_text('{"extensionField": "kept"}', encoding="utf-8")
-            database = root / "entries.json"
+            workspace = root / "shared"
+            fragment = workspace / "Peter_12345678.tacroman.json"
             output = root / "project" / "entries.tex"
-            database.touch()
 
             write_vscode_integration_state(
-                database,
+                workspace,
                 output,
+                fragment_path=fragment,
+                installation_id="f3181be7-a1a4-4d4c-8e4d-f24249546e45",
                 output_mode="project",
-                selected_profile_id="acronym-package",
                 state_path=state_path,
             )
 
             state = read_shared_state(state_path)
-            self.assertEqual(state["databasePath"], str(database.resolve()))
+            self.assertEqual(state["workspacePath"], str(workspace.resolve()))
+            self.assertEqual(state["fragmentPath"], str(fragment.resolve()))
+            self.assertEqual(state["installationId"], "f3181be7-a1a4-4d4c-8e4d-f24249546e45")
             self.assertEqual(state["outputPath"], str(output.resolve()))
             self.assertEqual(state["outputMode"], "project")
             self.assertEqual(state["extensionField"], "kept")
             self.assertNotIn("last_database_path", state)
+            self.assertNotIn("databasePath", state)
+
+    def test_installation_identity_is_created_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "TAcroMan" / "state.json"
+            first = ensure_installation_id(state_path)
+            second = ensure_installation_id(state_path)
+            self.assertEqual(first, second)
 
     def test_shared_state_does_not_import_legacy_path_fields(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

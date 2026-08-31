@@ -40,12 +40,12 @@ async function checkCurrentFile(databases: DatabaseManager): Promise<void> {
     candidates = await databases.loadCandidates(document);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    vscode.window.showErrorMessage(`TAcroMan: Could not load acronym database: ${message}`);
+    vscode.window.showErrorMessage(`TAcroMan: Could not load the workspace: ${message}`);
     return;
   }
 
   if (!candidates.length) {
-    vscode.window.showInformationMessage("TAcroMan: No acronyms are available in the selected database.");
+    vscode.window.showInformationMessage("TAcroMan: No conflict-free acronyms are available in the selected workspace.");
     return;
   }
 

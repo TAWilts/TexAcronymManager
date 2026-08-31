@@ -1,7 +1,7 @@
 {
   "name": "tacroman-vscode",
   "displayName": "TAcroMan",
-  "description": "Smart LaTeX acronym completion, plain-text detection, interactive replacement, and TAcroMan database integration.",
+  "description": "Smart LaTeX acronym completion, shared multiuser workspaces, conflict handling, and interactive replacement.",
   "version": "1.0.0",
   "publisher": "tawilts",
   "license": "MIT",
@@ -40,7 +40,11 @@
   ],
   "activationEvents": [
     "onLanguage:latex",
+    "onCommand:tacroman.selectWorkspace",
+    "onCommand:tacroman.createWorkspace",
     "onCommand:tacroman.selectDatabase",
+    "onCommand:tacroman.renameParticipant",
+    "onCommand:tacroman.importDatabase",
     "onCommand:tacroman.selectOutput",
     "onCommand:tacroman.open",
     "onCommand:tacroman.openDesktop",
@@ -56,9 +60,28 @@
   "contributes": {
     "commands": [
       {
-        "command": "tacroman.selectDatabase",
-        "title": "TAcroMan: Select Database",
+        "command": "tacroman.selectWorkspace",
+        "title": "TAcroMan: Select Workspace",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "tacroman.createWorkspace",
+        "title": "TAcroMan: Create Workspace",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "tacroman.selectDatabase",
+        "title": "TAcroMan: Select Workspace (Legacy Alias)"
+      },
+      {
+        "command": "tacroman.renameParticipant",
+        "title": "TAcroMan: Rename Participant",
+        "icon": "$(account)"
+      },
+      {
+        "command": "tacroman.importDatabase",
+        "title": "TAcroMan: Import Existing Database",
+        "icon": "$(cloud-download)"
       },
       {
         "command": "tacroman.open",
@@ -77,7 +100,7 @@
       },
       {
         "command": "tacroman.reload",
-        "title": "TAcroMan: Reload Database",
+        "title": "TAcroMan: Reload Workspace",
         "icon": "$(refresh)"
       },
       {
@@ -165,7 +188,7 @@
         "tacroman.inferPlainTextPlurals": {
           "type": "boolean",
           "default": true,
-          "description": "Also recognize a simple short-form plural by appending s when the TAcroMan database has no explicit short_plural value."
+          "description": "Also recognize a simple short-form plural by appending s when the TAcroMan workspace has no explicit short_plural value."
         },
         "tacroman.ignoredArgumentCommands": {
           "type": "array",
@@ -236,7 +259,7 @@
           "group": "navigation@3"
         },
         {
-          "command": "tacroman.selectDatabase",
+          "command": "tacroman.selectWorkspace",
           "when": "view == tacroman.acronymExplorer",
           "group": "tacroman@1"
         },

@@ -44,6 +44,7 @@ type SidebarNode = GroupNode | DatabaseNode | ActionNode | AcronymNode | Message
 interface SidebarSnapshot {
   database?: vscode.Uri;
   candidates: AcronymCandidate[];
+  conflictCount?: number;
   error?: string;
 }
 
@@ -118,7 +119,7 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
         item.tooltip = element.uri.fsPath;
         item.command = {
           command: "vscode.open",
-          title: "Open database",
+          title: "Open workspace",
           arguments: [element.uri],
         };
         return item;
@@ -163,7 +164,7 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
       const filteredCount = this.filteredCandidates(snapshot.candidates).length;
       const suffix = this.filterQuery ? ` / ${snapshot.candidates.length}` : "";
       return [
-        { type: "group", group: "database", label: "Database" },
+        { type: "group", group: "database", label: "Workspace" },
         { type: "group", group: "acronyms", label: `Acronyms (${filteredCount}${suffix})` },
       ];
     }
@@ -189,9 +190,9 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
       };
       const databaseAction: ActionNode = {
         type: "action",
-        label: snapshot.database ? `Database: ${snapshot.database.fsPath}` : "Select database",
-        description: "Choose the TAcroMan JSON database",
-        command: "tacroman.selectDatabase",
+        label: snapshot.database ? `Workspace: ${snapshot.database.fsPath}` : "Select workspace",
+        description: "Choose the shared TAcroMan workspace folder",
+        command: "tacroman.selectWorkspace",
         icon: "folder-opened",
       };
       const output = await this.databases.getOutputUri();
@@ -204,6 +205,15 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
       };
       if (snapshot.error) {
         return [checkAcronyms, openTAcroMan, databaseAction, outputAction, { type: "message", label: snapshot.error, icon: "error" }];
+      }
+      if (snapshot.conflictCount) {
+        return [
+          checkAcronyms,
+          openTAcroMan,
+          databaseAction,
+          outputAction,
+          { type: "message", label: `${snapshot.conflictCount} conflict(s) block completion and export`, icon: "warning" },
+        ];
       }
       if (!snapshot.database) {
         return [checkAcronyms, openTAcroMan, databaseAction, outputAction];
@@ -247,8 +257,14 @@ export class TAcroManSidebarProvider implements vscode.TreeDataProvider<SidebarN
     const document = vscode.window.activeTextEditor?.document;
     try {
       const database = await this.databases.getDatabaseUri(document);
+      const workspace = database ? await this.databases.loadWorkspace() : undefined;
       const candidates = database ? await this.databases.loadCandidates(document) : [];
-      this.snapshot = { database, candidates };
+      this.snapshot = {
+        database,
+        candidates,
+        conflictCount: workspace?.conflicts.length,
+        error: this.databases.getWorkspaceError(),
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.snapshot = { candidates: [], error: message };

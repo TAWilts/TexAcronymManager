@@ -56,6 +56,11 @@ function asString(value: unknown): string {
   return value === undefined || value === null ? "" : String(value);
 }
 
+function compareRenderValues(left: string, right: string): number {
+  const fold = (value: string) => value.toLowerCase().replace(/ß/g, "ss").replace(/ς/g, "σ");
+  return Buffer.from(fold(left), "utf8").compare(Buffer.from(fold(right), "utf8"));
+}
+
 function entriesFromDatabase(raw: unknown): Entry[] {
   let records: unknown[];
   if (Array.isArray(raw)) {
@@ -164,7 +169,7 @@ export function renderGeneratedOutput(database: unknown, rawProfile?: unknown): 
       group.sort((left, right) => {
         const leftValue = valuesForEntry(left, command, "none")[sortBy === "identifier" ? "id" : sortBy] ?? "";
         const rightValue = valuesForEntry(right, command, "none")[sortBy === "identifier" ? "id" : sortBy] ?? "";
-        return leftValue.localeCompare(rightValue, undefined, { sensitivity: "base" });
+        return compareRenderValues(leftValue, rightValue);
       });
     }
     for (const entry of group) {
@@ -176,11 +181,27 @@ export function renderGeneratedOutput(database: unknown, rawProfile?: unknown): 
   return `${asString(profile.header)}${lines.join(asString(profile.separator ?? "\n"))}${asString(profile.footer)}`;
 }
 
-export async function generateOutputFile(databasePath: string, outputPath: string, rawProfile?: unknown): Promise<void> {
-  const database = JSON.parse(await readFile(databasePath, "utf8")) as unknown;
+export async function generateWorkspaceOutput(
+  entries: Array<{ uid?: string; commandId: string; values: Record<string, string> }>,
+  outputPath: string,
+  rawProfile: unknown,
+): Promise<boolean> {
+  const database = {
+    entries: entries.map((entry) => ({
+      uid: entry.uid,
+      command_id: entry.commandId,
+      values: entry.values,
+    })),
+  };
   const rendered = renderGeneratedOutput(database, rawProfile);
+  try {
+    if (await readFile(outputPath, "utf8") === rendered) return false;
+  } catch {
+    // Missing and temporarily unavailable output files are written atomically below.
+  }
   await mkdir(path.dirname(outputPath), { recursive: true });
   const temporary = `${outputPath}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temporary, rendered, "utf8");
   await rename(temporary, outputPath);
+  return true;
 }

@@ -2,47 +2,50 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { AcronymCandidate, candidatesFromDatabase } from "./database";
 import {
-  databasePathFromIntegrationState,
   ensureDesktopIntegrationState,
+  installationIdFromIntegrationState,
   outputModeFromIntegrationState,
   outputPathFromIntegrationState,
   readDesktopIntegrationState,
   updateDesktopIntegrationState,
+  workspacePathFromIntegrationState,
 } from "./desktopIntegration";
+import {
+  createWorkspace as createWorkspaceOnDisk,
+  DEFAULT_WORKSPACE_PROFILE,
+  joinWorkspace,
+  loadWorkspace,
+  MANIFEST_FILENAME,
+  WorkspaceSnapshot,
+} from "./workspace";
 
-interface CachedDatabase {
-  uri: vscode.Uri;
-  mtime: number;
+interface CachedWorkspace {
+  workspacePath: string;
+  snapshot: WorkspaceSnapshot;
   candidates: AcronymCandidate[];
 }
 
 export class DatabaseManager implements vscode.Disposable {
-  private cache: CachedDatabase | undefined;
+  private cache: CachedWorkspace | undefined;
+  private lastValid: CachedWorkspace | undefined;
+  private workspaceError: string | undefined;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly databaseChangedEmitter = new vscode.EventEmitter<void>();
 
   readonly onDidChangeDatabase = this.databaseChangedEmitter.event;
 
-  constructor() {
-    const watcher = vscode.workspace.createFileSystemWatcher("**/*.json");
-    this.disposables.push(
-      watcher,
-      watcher.onDidChange((uri) => this.invalidateIfSelected(uri)),
-      watcher.onDidDelete((uri) => this.invalidateIfSelected(uri)),
-      watcher.onDidCreate(() => this.clearCache()),
-    );
-  }
-
   async initialize(): Promise<void> {
-    await ensureDesktopIntegrationState(this.projectOutputPath());
-    await this.syncProjectOutput();
+    try {
+      await ensureDesktopIntegrationState(this.projectOutputPath());
+      await this.syncProjectOutput();
+    } catch (error) {
+      this.workspaceError = `TAcroMan workspace error: ${error instanceof Error ? error.message : String(error)}`;
+    }
     this.clearCache();
   }
 
   dispose(): void {
-    for (const disposable of this.disposables) {
-      disposable.dispose();
-    }
+    for (const disposable of this.disposables) disposable.dispose();
     this.databaseChangedEmitter.dispose();
   }
 
@@ -55,39 +58,63 @@ export class DatabaseManager implements vscode.Disposable {
     this.clearCache();
   }
 
-  private invalidateIfSelected(uri: vscode.Uri): void {
-    if (!this.cache || this.cache.uri.fsPath === uri.fsPath) {
-      this.clearCache();
-    }
+  getWorkspaceError(): string | undefined {
+    return this.workspaceError;
   }
 
-  async selectDatabase(): Promise<vscode.Uri | undefined> {
-    const current = await this.getDatabaseUri();
+  setWorkspaceError(message: string | undefined): void {
+    if (message === this.workspaceError) return;
+    this.workspaceError = message;
+    this.databaseChangedEmitter.fire();
+  }
+
+  async selectWorkspace(): Promise<vscode.Uri | undefined> {
+    const current = await this.getWorkspaceUri();
     const picked = await vscode.window.showOpenDialog({
       defaultUri: current,
-      canSelectFiles: true,
-      canSelectFolders: false,
+      canSelectFiles: false,
+      canSelectFolders: true,
       canSelectMany: false,
-      filters: { "TAcroMan database": ["json"] },
-      title: "Select TAcroMan database",
+      title: "Select or create a TAcroMan workspace folder",
     });
-    if (!picked?.[0]) {
-      return undefined;
-    }
+    if (!picked?.[0]) return undefined;
     return this.selectUri(picked[0]);
   }
 
+  async selectDatabase(): Promise<vscode.Uri | undefined> {
+    return this.selectWorkspace();
+  }
+
+  async createNewWorkspace(): Promise<vscode.Uri | undefined> {
+    const picked = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      title: "Create a TAcroMan workspace in the selected folder",
+    });
+    if (!picked?.[0]) return undefined;
+    const state = await readDesktopIntegrationState();
+    const installationId = installationIdFromIntegrationState(state);
+    if (!installationId) throw new Error("TAcroMan installation identity is missing.");
+    const active = await this.loadWorkspace();
+    const snapshot = await createWorkspaceOnDisk(
+      picked[0].fsPath,
+      installationId,
+      active?.profile ?? DEFAULT_WORKSPACE_PROFILE,
+    );
+    await this.persistSelection(picked[0], snapshot, state);
+    return picked[0];
+  }
+
   async selectOutput(): Promise<vscode.Uri | undefined> {
-    const database = await this.getDatabaseUri();
+    const workspace = await this.getWorkspaceUri();
     const current = await this.getOutputUri();
     const picked = await vscode.window.showSaveDialog({
-      defaultUri: current ?? (database ? database.with({ path: database.path.replace(/\.json$/i, ".tex") }) : undefined),
+      defaultUri: current ?? (workspace ? vscode.Uri.file(path.join(workspace.fsPath, "entries.tex")) : undefined),
       filters: { "TeX file": ["tex"] },
       title: "Select generated TeX output",
     });
-    if (!picked) {
-      return undefined;
-    }
+    if (!picked) return undefined;
     await updateDesktopIntegrationState({ outputPath: picked.fsPath, outputMode: "custom" });
     this.clearCache();
     return picked;
@@ -95,19 +122,19 @@ export class DatabaseManager implements vscode.Disposable {
 
   async getOutputUri(): Promise<vscode.Uri | undefined> {
     const state = await readDesktopIntegrationState();
-    const stored = outputPathFromIntegrationState(state);
-    if (stored) {
-      return vscode.Uri.file(stored);
+    if (outputModeFromIntegrationState(state) === "database") {
+      const workspace = await this.getWorkspaceUri();
+      return workspace ? vscode.Uri.file(path.join(workspace.fsPath, "entries.tex")) : undefined;
     }
-    const database = await this.getDatabaseUri();
-    return database ? database.with({ path: database.path.replace(/\.json$/i, ".tex") }) : undefined;
+    const stored = outputPathFromIntegrationState(state);
+    if (stored) return vscode.Uri.file(stored);
+    const workspace = await this.getWorkspaceUri();
+    return workspace ? vscode.Uri.file(path.join(workspace.fsPath, "entries.tex")) : undefined;
   }
 
   async syncProjectOutput(document?: vscode.TextDocument): Promise<void> {
     const state = await readDesktopIntegrationState();
-    if (outputModeFromIntegrationState(state) !== "project") {
-      return;
-    }
+    if (outputModeFromIntegrationState(state) !== "project") return;
     const desired = this.projectOutputPath(document);
     if (desired && outputPathFromIntegrationState(state) !== desired) {
       await updateDesktopIntegrationState({ outputPath: desired, outputMode: "project" });
@@ -116,48 +143,107 @@ export class DatabaseManager implements vscode.Disposable {
   }
 
   private async selectUri(uri: vscode.Uri): Promise<vscode.Uri> {
+    const activeProfile = (await this.loadWorkspace())?.profile ?? DEFAULT_WORKSPACE_PROFILE;
     const state = await readDesktopIntegrationState();
-    const changes: Record<string, unknown> = { databasePath: uri.fsPath };
-    if (outputModeFromIntegrationState(state) === "database") {
-      changes.outputPath = uri.fsPath.replace(/\.json$/i, ".tex");
+    const installationId = installationIdFromIntegrationState(state);
+    if (!installationId) throw new Error("TAcroMan installation identity is missing.");
+    let snapshot: WorkspaceSnapshot;
+    try {
+      snapshot = await joinWorkspace(uri.fsPath, installationId);
+    } catch (error) {
+      try {
+        await vscode.workspace.fs.stat(vscode.Uri.file(path.join(uri.fsPath, MANIFEST_FILENAME)));
+        throw error;
+      } catch (manifestError) {
+        if (manifestError === error) throw error;
+        snapshot = await createWorkspaceOnDisk(uri.fsPath, installationId, activeProfile);
+      }
     }
-    await updateDesktopIntegrationState(changes);
-    this.clearCache();
-    vscode.window.setStatusBarMessage(`TAcroMan: ${vscode.workspace.asRelativePath(uri, false)}`, 4000);
+    await this.persistSelection(uri, snapshot, state);
     return uri;
   }
 
-  async getDatabaseUri(_activeDocument?: vscode.TextDocument): Promise<vscode.Uri | undefined> {
-    const state = await readDesktopIntegrationState();
-    const selected = databasePathFromIntegrationState(state);
-    if (selected) {
-      const uri = vscode.Uri.file(selected);
-      try {
-        await vscode.workspace.fs.stat(uri);
-        return uri;
-      } catch {
-        return undefined;
-      }
+  private async persistSelection(
+    uri: vscode.Uri,
+    snapshot: WorkspaceSnapshot,
+    state: Awaited<ReturnType<typeof readDesktopIntegrationState>>,
+  ): Promise<void> {
+    const changes: Record<string, unknown> = {
+      workspacePath: uri.fsPath,
+      fragmentPath: snapshot.localFragmentPath,
+    };
+    if (outputModeFromIntegrationState(state) === "database") {
+      changes.outputPath = path.join(uri.fsPath, "entries.tex");
     }
-    return undefined;
+    await updateDesktopIntegrationState(changes);
+    this.workspaceError = undefined;
+    this.clearCache();
+    vscode.window.setStatusBarMessage(`TAcroMan: ${vscode.workspace.asRelativePath(uri, false)}`, 4000);
   }
 
-  async loadCandidates(activeDocument?: vscode.TextDocument): Promise<AcronymCandidate[]> {
-    const uri = await this.getDatabaseUri(activeDocument);
-    if (!uri) {
-      return [];
+  async getWorkspaceUri(_activeDocument?: vscode.TextDocument): Promise<vscode.Uri | undefined> {
+    const selected = workspacePathFromIntegrationState(await readDesktopIntegrationState());
+    if (!selected) return undefined;
+    const uri = vscode.Uri.file(selected);
+    try {
+      await vscode.workspace.fs.stat(uri);
+      return uri;
+    } catch {
+      return undefined;
     }
+  }
 
-    const stat = await vscode.workspace.fs.stat(uri);
-    if (this.cache && this.cache.uri.fsPath === uri.fsPath && this.cache.mtime === stat.mtime) {
-      return this.cache.candidates;
+  async getDatabaseUri(activeDocument?: vscode.TextDocument): Promise<vscode.Uri | undefined> {
+    return this.getWorkspaceUri(activeDocument);
+  }
+
+  async loadWorkspace(): Promise<WorkspaceSnapshot | undefined> {
+    const state = await readDesktopIntegrationState();
+    const workspacePath = workspacePathFromIntegrationState(state);
+    const installationId = installationIdFromIntegrationState(state);
+    if (!workspacePath || !installationId) return undefined;
+    if (this.cache?.workspacePath === workspacePath) return this.cache.snapshot;
+    try {
+      return await this.readWorkspace(workspacePath, installationId);
+    } catch (error) {
+      if (this.lastValid?.workspacePath === workspacePath) return this.lastValid.snapshot;
+      throw error;
     }
+  }
 
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    const text = new TextDecoder("utf-8").decode(bytes);
-    const candidates = candidatesFromDatabase(JSON.parse(text) as unknown);
-    this.cache = { uri, mtime: stat.mtime, candidates };
-    return candidates;
+  async reloadWorkspace(): Promise<WorkspaceSnapshot | undefined> {
+    const state = await readDesktopIntegrationState();
+    const workspacePath = workspacePathFromIntegrationState(state);
+    const installationId = installationIdFromIntegrationState(state);
+    if (!workspacePath || !installationId) return undefined;
+    const previousRevision = this.lastValid?.workspacePath === workspacePath
+      ? this.lastValid.snapshot.revision
+      : undefined;
+    this.cache = undefined;
+    const snapshot = await this.readWorkspace(workspacePath, installationId);
+    if (previousRevision !== snapshot.revision) this.databaseChangedEmitter.fire();
+    return snapshot;
+  }
+
+  private async readWorkspace(workspacePath: string, installationId: string): Promise<WorkspaceSnapshot> {
+    const snapshot = await loadWorkspace(workspacePath, installationId);
+    const database = {
+      entries: snapshot.entries.map((entry) => ({
+        uid: entry.uid,
+        command_id: entry.commandId,
+        values: entry.values,
+      })),
+    };
+    const candidates = candidatesFromDatabase(database);
+    this.cache = { workspacePath, snapshot, candidates };
+    this.lastValid = this.cache;
+    return snapshot;
+  }
+
+  async loadCandidates(_activeDocument?: vscode.TextDocument): Promise<AcronymCandidate[]> {
+    const snapshot = await this.loadWorkspace();
+    if (!snapshot) return [];
+    return this.cache?.candidates ?? [];
   }
 
   private projectOutputPath(document?: vscode.TextDocument): string | undefined {

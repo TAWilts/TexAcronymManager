@@ -1,0 +1,113 @@
+{
+  "manifest": {
+    "format": "tacroman-workspace",
+    "format_version": 1,
+    "workspace_id": "11111111-1111-4111-8111-111111111111",
+    "name": "Contract",
+    "created_at": "2026-08-31T12:00:00Z",
+    "profile": {
+      "schema_version": 2,
+      "id": "contract",
+      "name": "Contract",
+      "header": "",
+      "footer": "",
+      "separator": "\n",
+      "sort_by": "short",
+      "commands": [
+        {
+          "id": "acronym",
+          "label": "Acronym",
+          "template": "\\acro{[[short]]}{[[long]]}",
+          "fields": [
+            {
+              "id": "short",
+              "label": "Short",
+              "comparison_group": "key"
+            },
+            {
+              "id": "long",
+              "label": "Long"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "fragments": {
+    "Peter_a8d99xQr.tacroman.json": {
+      "format": "tacroman-fragment",
+      "format_version": 1,
+      "workspace_id": "11111111-1111-4111-8111-111111111111",
+      "owner": {
+        "installation_id": "22222222-2222-4222-8222-222222222222",
+        "display_name": "Peter",
+        "created_at": "2026-08-31T12:01:00Z",
+        "suffix": "a8d99xQr"
+      },
+      "payload": {
+        "schema_version": 2,
+        "entries": [
+          {
+            "uid": "p-auv",
+            "command_id": "acronym",
+            "values": {
+              "short": "AUV",
+              "long": "autonomous underwater vehicle"
+            }
+          },
+          {
+            "uid": "p-dvl",
+            "command_id": "acronym",
+            "values": {
+              "short": "DVL",
+              "long": "Doppler velocity log"
+            }
+          }
+        ]
+      }
+    },
+    "Alex_X7s2P9ka.tacroman.json": {
+      "format": "tacroman-fragment",
+      "format_version": 1,
+      "workspace_id": "11111111-1111-4111-8111-111111111111",
+      "owner": {
+        "installation_id": "33333333-3333-4333-8333-333333333333",
+        "display_name": "Alex",
+        "created_at": "2026-08-31T12:02:00Z",
+        "suffix": "X7s2P9ka"
+      },
+      "payload": {
+        "schema_version": 2,
+        "entries": [
+          {
+            "uid": "a-auv",
+            "command_id": "acronym",
+            "values": {
+              "short": "AUV",
+              "long": "automatic underwater vehicle"
+            }
+          },
+          {
+            "uid": "a-dvl",
+            "command_id": "acronym",
+            "values": {
+              "short": "DVL",
+              "long": "Doppler velocity log"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "expected": {
+    "merged_keys": [
+      "DVL"
+    ],
+    "conflict_labels": [
+      "AUV"
+    ],
+    "conflict_ids": [
+      "b70cffbdce3f43d1"
+    ]
+  }
+}

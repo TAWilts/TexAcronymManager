@@ -1,5 +1,17 @@
 # Change Log
 
+## 1.0.0
+
+- Replace the single shared database file with multiuser workspace folders and
+  one owner-only fragment per installation.
+- Merge identical entries once and add a shared conflict center for divergent
+  variants without overwriting the last valid generated output.
+- Add workspace creation/selection, participant renaming, explicit legacy
+  import previews, strict schema validation, revision-safe writes, and resilient
+  file watching for cloud-synchronized folders.
+- Keep Desktop and VS Code aligned through shared contract fixtures and the
+  workspace profile stored in `.tacroman-workspace.json`.
+
 ## 0.7.3
 
 - Add contextual, bilingual help tooltips to every application-owned popup and

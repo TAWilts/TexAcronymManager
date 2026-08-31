@@ -16,12 +16,14 @@
           <select id="profile-select" class="profile-select" aria-label="Render profile"></select>
         </div>
         <div class="paths">
-          <div class="path"><strong data-text="databaseLabel">Database:</strong> <span id="database-path" data-text="loading">Loading…</span></div>
+          <div class="path"><strong data-text="databaseLabel">Workspace:</strong> <span id="database-path" data-text="loading">Loading…</span></div>
+          <div class="path"><strong data-text="participantLabel">Participant:</strong> <span id="participant-name"></span> · <span id="fragment-path"></span></div>
           <div class="path"><strong data-text="outputLabel">Output:</strong> <span id="output-path"></span></div>
         </div>
       </div>
       <div class="toolbar">
-        <button id="select-database" class="button secondary" type="button" data-text="selectDatabase">Select database</button>
+        <button id="select-database" class="button secondary" type="button" data-text="selectDatabase">Select workspace</button>
+        <button id="rename-participant" class="button secondary" type="button" data-text="renameParticipant">Rename participant</button>
         <button id="select-output" class="button secondary" type="button" data-text="selectOutput">Select output</button>
         <button id="open-desktop" class="button secondary" type="button" data-text="desktopApp">Desktop app</button>
       </div>
@@ -30,8 +32,9 @@
       <details class="menu">
         <summary data-text="menuFile">File</summary>
         <div class="menu-popup">
-          <button id="menu-open-database" type="button" data-text="openDatabase">Open database…</button>
-          <button id="menu-new-database" type="button" data-text="newDatabase">New database…</button>
+          <button id="menu-open-database" type="button" data-text="openDatabase">Open workspace…</button>
+          <button id="menu-new-database" type="button" data-text="newDatabase">New workspace…</button>
+          <button id="menu-import-database" type="button" data-text="importDatabase">Import existing database…</button>
           <button id="menu-import-tex" type="button" data-text="importTex">Import TeX file…</button>
           <button id="menu-write-output" type="button" data-text="writeOutput">Write output file</button>
           <span class="menu-separator"></span>
@@ -76,8 +79,12 @@
         <div id="entry-list" class="entry-list" role="list"></div>
       </aside>
       <section class="editor">
+        <div id="workspace-conflicts" class="conflict workspace-conflicts" hidden>
+          <span id="workspace-conflict-text"></span>
+          <button id="open-conflicts" class="button secondary" type="button" data-text="openConflicts">Resolve conflicts</button>
+        </div>
         <div id="conflict" class="conflict" hidden>
-          <span data-text="conflict">The database changed outside this editor.</span>
+          <span data-text="conflict">The workspace changed outside this editor.</span>
           <button id="reload-conflict" class="button secondary" type="button" data-text="reload">Reload</button>
         </div>
         <form id="editor-form">
@@ -108,6 +115,21 @@
       <div id="info-content" class="info-content"></div>
       <div class="dialog-actions"><button class="button" type="submit" data-text="close">Close</button></div>
     </form>
+  </dialog>
+  <dialog id="conflict-dialog" class="tool-dialog">
+    <div class="tool-shell">
+      <header class="tool-header">
+        <h2 data-text="conflictCenter">Workspace conflicts</h2>
+        <div class="tool-header-actions">
+          <div class="window-help">
+            <button class="help-button" type="button" aria-describedby="conflict-help-tooltip">?</button>
+            <div id="conflict-help-tooltip" class="help-tooltip" role="tooltip" data-text="conflictHelp"></div>
+          </div>
+          <button id="conflict-close" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+      </header>
+      <div id="conflict-body" class="tool-body"></div>
+    </div>
   </dialog>
   <dialog id="tool-dialog" class="tool-dialog">
     <div class="tool-shell">

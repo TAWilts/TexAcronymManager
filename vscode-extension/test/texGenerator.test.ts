@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import test from "node:test";
-import { renderGeneratedOutput } from "../src/texGenerator";
+import { generateWorkspaceOutput, renderGeneratedOutput } from "../src/texGenerator";
+import { DEFAULT_WORKSPACE_PROFILE } from "../src/workspace";
 
 test("generates TeX whenever a v2 acronym database changes", () => {
   const output = renderGeneratedOutput({
@@ -38,4 +42,16 @@ test("uses the render profile published by the desktop app", () => {
     },
   );
   assert.equal(output, "\\newacronym{a\\_b}{A\\&B}{alpha\\_beta}\n");
+});
+
+test("does not rewrite identical workspace output", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "tacroman-output-"));
+  try {
+    const output = path.join(root, "entries.tex");
+    const entries = [{ uid: "auv", commandId: "acronym", values: { short: "AUV", long: "vehicle" } }];
+    assert.equal(await generateWorkspaceOutput(entries, output, DEFAULT_WORKSPACE_PROFILE), true);
+    assert.equal(await generateWorkspaceOutput(entries, output, DEFAULT_WORKSPACE_PROFILE), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

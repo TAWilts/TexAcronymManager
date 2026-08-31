@@ -6,7 +6,7 @@ export interface SidebarAcronymForm {
   long: string;
 }
 
-/** Explicit forms stored in acronyms.json. Inferred plurals are intentionally
+/** Explicit forms stored in the merged workspace. Inferred plurals are intentionally
  * not shown in the sidebar. */
 export function sidebarAcronymForms(candidate: AcronymCandidate): SidebarAcronymForm[] {
   const singularLabel = (candidate.short || candidate.key).trim() || candidate.key;

@@ -3,7 +3,14 @@ import * as vscode from "vscode";
 import { findCompletionContext } from "./context";
 import { matchesQuery, rankCandidatesForQuery } from "./database";
 import { DatabaseManager } from "./databaseManager";
-import { desktopLaunchArguments, readDesktopLauncher } from "./desktopIntegration";
+import {
+  desktopLaunchArguments,
+  installationIdFromIntegrationState,
+  readDesktopIntegrationState,
+  readDesktopLauncher,
+  updateDesktopIntegrationState,
+} from "./desktopIntegration";
+import { legacyEntries, previewLocalEntries, renameParticipant, saveLocalEntries } from "./workspace";
 import { registerTAcroManSidebar } from "./sidebar";
 import { registerCheckAcronymsCommand } from "./acronymCheckCommand";
 import { registerDatabaseWatcher } from "./databaseWatcher";
@@ -337,7 +344,7 @@ class TAcroManCodeActionProvider implements vscode.CodeActionProvider {
 
 async function openDesktopTAcroMan(databases: DatabaseManager): Promise<void> {
   const document = vscode.window.activeTextEditor?.document;
-  const database = await databases.getDatabaseUri(document);
+  const workspace = await databases.getWorkspaceUri(document);
   const output = await databases.getOutputUri();
 
   const configuration = vscode.workspace.getConfiguration("tacroman", document?.uri);
@@ -350,12 +357,11 @@ async function openDesktopTAcroMan(databases: DatabaseManager): Promise<void> {
     return;
   }
 
-  // The desktop application can create or select a database itself. Only pass
-  // a database path when the extension already knows one.
+  // The desktop application can create or select a workspace itself.
   const args = desktopLaunchArguments(
     desktopLauncher.args,
     extraArguments,
-    database?.fsPath,
+    workspace?.fsPath,
     output?.fsPath,
   );
 
@@ -399,14 +405,66 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       new TAcroManCodeActionProvider(diagnostics),
       { providedCodeActionKinds: TAcroManCodeActionProvider.providedCodeActionKinds },
     ),
-    vscode.commands.registerCommand("tacroman.selectDatabase", () => databases.selectDatabase()),
+    vscode.commands.registerCommand("tacroman.selectWorkspace", () => databases.selectWorkspace()),
+    vscode.commands.registerCommand("tacroman.createWorkspace", () => databases.createNewWorkspace()),
+    vscode.commands.registerCommand("tacroman.selectDatabase", () => databases.selectWorkspace()),
     vscode.commands.registerCommand("tacroman.selectOutput", () => databases.selectOutput()),
     vscode.commands.registerCommand("tacroman.reload", () => {
       databases.clearCache();
-      vscode.window.setStatusBarMessage("TAcroMan: database cache cleared", 3000);
+      vscode.window.setStatusBarMessage("TAcroMan: workspace cache cleared", 3000);
     }),
     vscode.commands.registerCommand("tacroman.open", () => TAcroManManagerPanel.show(context, databases)),
     vscode.commands.registerCommand("tacroman.openDesktop", () => openDesktopTAcroMan(databases)),
+    vscode.commands.registerCommand("tacroman.renameParticipant", async () => {
+      const workspace = await databases.loadWorkspace();
+      const state = await readDesktopIntegrationState();
+      const installationId = installationIdFromIntegrationState(state);
+      if (!workspace || !installationId) return;
+      const displayName = await vscode.window.showInputBox({
+        title: "Rename TAcroMan participant",
+        value: workspace.localOwner.display_name,
+        validateInput: (value) => value.trim() ? undefined : "Enter a participant name.",
+      });
+      if (!displayName?.trim()) return;
+      const renamed = await renameParticipant(workspace.workspacePath, installationId, workspace.revision, displayName);
+      await updateDesktopIntegrationState({ fragmentPath: renamed.localFragmentPath });
+      databases.clearCache();
+    }),
+    vscode.commands.registerCommand("tacroman.importDatabase", async () => {
+      const picked = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        filters: { "Legacy TAcroMan database": ["json"] },
+        title: "Import existing TAcroMan database",
+      });
+      if (!picked?.[0]) return;
+      const workspace = await databases.loadWorkspace();
+      const state = await readDesktopIntegrationState();
+      const installationId = installationIdFromIntegrationState(state);
+      if (!workspace || !installationId) return;
+      const raw = JSON.parse(new TextDecoder("utf8").decode(await vscode.workspace.fs.readFile(picked[0]))) as unknown;
+      const imported = legacyEntries(raw);
+      const byUid = new Map(workspace.localEntries.map((entry) => [entry.uid, entry]));
+      for (const entry of imported) byUid.set(entry.uid, entry);
+      const proposed = [...byUid.values()];
+      const preview = previewLocalEntries(workspace, proposed);
+      const oldDuplicates = workspace.entries.reduce((count, entry) => count + Math.max(0, entry.sources.length - 1), 0);
+      const newDuplicates = preview.entries.reduce((count, entry) => count + Math.max(0, entry.sources.length - 1), 0);
+      const conflicts = preview.conflicts.map((conflict) => conflict.label);
+      const decision = await vscode.window.showWarningMessage(
+        `Import ${imported.length} entries into your participant fragment?`,
+        {
+          modal: true,
+          detail: `Identical duplicates: ${Math.max(0, newDuplicates - oldDuplicates)}\nConflicts after import: ${conflicts.length ? conflicts.join(", ") : "0"}\n\nThe source file and foreign fragments will not be changed.`,
+        },
+        "Import",
+      );
+      if (decision !== "Import") return;
+      await saveLocalEntries(workspace.workspacePath, installationId, workspace.revision, proposed);
+      await updateDesktopIntegrationState({ legacyDatabasePath: undefined, databasePath: undefined });
+      databases.clearCache();
+    }),
   );
 }
 

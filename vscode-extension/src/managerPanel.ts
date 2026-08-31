@@ -1,27 +1,40 @@
+import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
 import { DatabaseManager } from "./databaseManager";
+import { EditorProfile, editorProfileFromRaw, validateEditorEntry } from "./editorModel";
 import {
-  DatabaseConflictError,
-  EditorProfile,
-  editorProfileFromRaw,
-  mutateEditorDatabase,
-  readEditorDatabase,
-} from "./editorModel";
-import {
+  installationIdFromIntegrationState,
   outputPathFromIntegrationState,
   readDesktopIntegrationState,
   updateDesktopIntegrationState,
 } from "./desktopIntegration";
+import {
+  legacyEntries,
+  previewLocalEntries,
+  renameParticipant,
+  saveLocalEntries,
+  saveWorkspaceProfile,
+  WorkspaceConflictError,
+  WorkspaceEntry,
+  WorkspaceOwner,
+} from "./workspace";
 
 type SnapshotReason = "initial" | "mutation" | "external" | "selection";
 
 interface ManagerSnapshot {
   hostKind: "vscode";
   language: "de" | "en";
-  databasePath: string;
+  workspacePath: string;
+  fragmentPath: string;
   outputPath?: string;
+  legacyDatabasePath?: string;
   revision: string;
-  entries: Awaited<ReturnType<typeof readEditorDatabase>>["entries"];
+  entries: Array<WorkspaceEntry & { localUid?: string; editable: boolean; sources: Array<Record<string, unknown>> }>;
+  conflicts: Array<Record<string, unknown>>;
+  exportBlocked: boolean;
+  owner: WorkspaceOwner;
+  fragmentCount: number;
+  workspaceError?: string;
   profile: EditorProfile;
   profiles: Array<{ id: string; name: string }>;
 }
@@ -43,8 +56,10 @@ interface DeleteEntryMessage {
 }
 
 type ManagerMessage =
-  | { type: "ready" | "selectDatabase" | "selectOutput" | "openDesktop" }
-  | { type: "selectProfile"; profileId: string }
+  | { type: "ready" | "selectDatabase" | "selectOutput" | "openDesktop" | "dismissLegacySetup" }
+  | { type: "selectProfile"; profileId: string; revision: string }
+  | { type: "renameParticipant"; revision: string; displayName: string }
+  | { type: "importDatabase"; revision: string }
   | SaveEntryMessage
   | DeleteEntryMessage;
 
@@ -67,11 +82,17 @@ function stringRecord(raw: unknown): Record<string, string> | undefined {
 
 function managerMessage(raw: unknown): ManagerMessage | undefined {
   if (!isObject(raw) || typeof raw.type !== "string") return undefined;
-  if (["ready", "selectDatabase", "selectOutput", "openDesktop"].includes(raw.type)) {
-    return { type: raw.type as "ready" | "selectDatabase" | "selectOutput" | "openDesktop" };
+  if (["ready", "selectDatabase", "selectOutput", "openDesktop", "dismissLegacySetup"].includes(raw.type)) {
+    return { type: raw.type as "ready" | "selectDatabase" | "selectOutput" | "openDesktop" | "dismissLegacySetup" };
   }
-  if (raw.type === "selectProfile" && typeof raw.profileId === "string") {
-    return { type: "selectProfile", profileId: raw.profileId };
+  if (raw.type === "selectProfile" && typeof raw.profileId === "string" && typeof raw.revision === "string") {
+    return { type: "selectProfile", profileId: raw.profileId, revision: raw.revision };
+  }
+  if (raw.type === "renameParticipant" && typeof raw.revision === "string" && typeof raw.displayName === "string") {
+    return { type: "renameParticipant", revision: raw.revision, displayName: raw.displayName };
+  }
+  if (raw.type === "importDatabase" && typeof raw.revision === "string") {
+    return { type: "importDatabase", revision: raw.revision };
   }
   if (raw.type === "deleteEntry" && typeof raw.revision === "string" && typeof raw.uid === "string") {
     return { type: "deleteEntry", revision: raw.revision, uid: raw.uid };
@@ -180,28 +201,12 @@ export class TAcroManManagerPanel implements vscode.Disposable {
     const content = new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
     const raw = JSON.parse(content) as unknown;
     if (!Array.isArray(raw)) throw new Error("The bundled TAcroMan profiles are invalid.");
-    const state = await readDesktopIntegrationState();
     const merged = new Map<string, Record<string, unknown>>();
     for (const item of raw) {
       if (isObject(item) && typeof item.id === "string") merged.set(item.id, item);
     }
-    if (typeof state?.profilesPath === "string" && state.profilesPath.trim()) {
-      try {
-        const customUri = vscode.Uri.file(state.profilesPath.trim());
-        const customContent = new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(customUri));
-        const custom = JSON.parse(customContent) as unknown;
-        if (Array.isArray(custom)) {
-          for (const item of custom) {
-            if (isObject(item) && typeof item.id === "string") merged.set(item.id, item);
-          }
-        }
-      } catch {
-        // Missing or temporarily invalid custom profiles must not hide the bundled defaults.
-      }
-    }
-    if (isObject(state?.renderProfile) && typeof state.renderProfile.id === "string") {
-      merged.set(state.renderProfile.id, state.renderProfile);
-    }
+    const workspace = await this.databases.loadWorkspace();
+    if (workspace && typeof workspace.profile.id === "string") merged.set(workspace.profile.id, workspace.profile);
     return [...merged.values()];
   }
 
@@ -210,9 +215,10 @@ export class TAcroManManagerPanel implements vscode.Disposable {
     profiles: Array<{ id: string; name: string }>;
     raw: Record<string, unknown>;
   }> {
-    const state = await readDesktopIntegrationState();
+    const workspace = await this.databases.loadWorkspace();
+    if (!workspace) throw new Error("No TAcroMan workspace is selected.");
     const rawProfiles = await this.availableRawProfiles();
-    const selectedId = typeof state?.selectedProfileId === "string" ? state.selectedProfileId : "acronym-package";
+    const selectedId = typeof workspace.profile.id === "string" ? workspace.profile.id : "acronym-package";
     const selectedRaw = rawProfiles.find((item) => item.id === selectedId) ?? rawProfiles[0];
     const profile = editorProfileFromRaw(selectedRaw);
     if (!selectedRaw || !profile) throw new Error("No usable TAcroMan profile was found.");
@@ -227,29 +233,60 @@ export class TAcroManManagerPanel implements vscode.Disposable {
     return (await this.profileState()).profile;
   }
 
-  private async selectProfile(profileId: string): Promise<void> {
+  private async selectProfile(profileId: string, expectedRevision: string): Promise<void> {
     const rawProfiles = await this.availableRawProfiles();
     const selected = rawProfiles.find((item) => item.id === profileId);
     if (!selected || !editorProfileFromRaw(selected)) throw new Error("The selected profile is not available.");
-    await updateDesktopIntegrationState({ selectedProfileId: profileId, renderProfile: selected });
+    const state = await readDesktopIntegrationState();
+    const installationId = installationIdFromIntegrationState(state);
+    const workspace = await this.databases.loadWorkspace();
+    if (!workspace || !installationId) throw new Error("No TAcroMan workspace is selected.");
+    await saveWorkspaceProfile(workspace.workspacePath, installationId, expectedRevision, selected);
     this.databases.clearCache();
   }
 
   private async snapshot(): Promise<ManagerSnapshot> {
-    const database = await this.databases.getDatabaseUri();
-    if (!database) throw new Error("No TAcroMan database is selected.");
-    const [content, state, profiles] = await Promise.all([
-      readEditorDatabase(database.fsPath),
+    const [workspace, state, profiles] = await Promise.all([
+      this.databases.loadWorkspace(),
       readDesktopIntegrationState(),
       this.profileState(),
     ]);
+    if (!workspace) throw new Error("No TAcroMan workspace is selected.");
     return {
       hostKind: "vscode",
       language: state?.language === "de" ? "de" : "en",
-      databasePath: database.fsPath,
+      workspacePath: workspace.workspacePath,
+      fragmentPath: workspace.localFragmentPath,
       outputPath: outputPathFromIntegrationState(state),
-      revision: content.revision,
-      entries: content.entries,
+      legacyDatabasePath: typeof state?.legacyDatabasePath === "string" ? state.legacyDatabasePath : undefined,
+      revision: workspace.revision,
+      entries: workspace.entries.map((entry) => ({
+        ...entry,
+        sources: entry.sources.map((source) => ({
+          owner: source.owner.display_name,
+          installationId: source.owner.installation_id,
+          fragment: source.fragmentPath,
+          uid: source.entry.uid,
+        })),
+      })),
+      conflicts: workspace.conflicts.map((conflict) => ({
+        id: conflict.id,
+        label: conflict.label,
+        localUids: conflict.localUids,
+        variants: conflict.variants.map((source) => ({
+          uid: source.entry.uid,
+          commandId: source.entry.commandId,
+          values: source.entry.values,
+          owner: source.owner.display_name,
+          installationId: source.owner.installation_id,
+          fragment: source.fragmentPath,
+          editable: source.editable,
+        })),
+      })),
+      exportBlocked: workspace.exportBlocked,
+      owner: workspace.localOwner,
+      fragmentCount: workspace.fragmentCount,
+      workspaceError: this.databases.getWorkspaceError(),
       profile: profiles.profile,
       profiles: profiles.profiles,
     };
@@ -269,22 +306,31 @@ export class TAcroManManagerPanel implements vscode.Disposable {
   }
 
   private async mutate(message: SaveEntryMessage | DeleteEntryMessage): Promise<void> {
-    const database = await this.databases.getDatabaseUri();
-    if (!database) throw new Error("No TAcroMan database is selected.");
+    const workspace = await this.databases.loadWorkspace();
+    const state = await readDesktopIntegrationState();
+    const installationId = installationIdFromIntegrationState(state);
+    if (!workspace || !installationId) throw new Error("No TAcroMan workspace is selected.");
     const profile = await this.activeProfile();
+    let localEntries = [...workspace.localEntries];
     if (message.type === "saveEntry") {
-      await mutateEditorDatabase(database.fsPath, message.revision, {
-        kind: "save",
-        uid: message.entry.uid,
-        commandId: message.entry.commandId,
-        values: message.entry.values,
-      }, profile);
+      const uid = message.entry.uid ?? randomUUID();
+      const candidate = { uid, commandId: message.entry.commandId, values: message.entry.values };
+      const errors = validateEditorEntry(candidate, localEntries, profile);
+      if (errors.length) throw new Error(errors.join("\n"));
+      const index = localEntries.findIndex((entry) => entry.uid === uid);
+      if (index >= 0) localEntries[index] = candidate;
+      else localEntries.push(candidate);
     } else {
-      await mutateEditorDatabase(database.fsPath, message.revision, {
-        kind: "delete",
-        uid: message.uid,
-      }, profile);
+      if (!localEntries.some((entry) => entry.uid === message.uid)) throw new Error("The selected entry is read-only or no longer exists.");
+      localEntries = localEntries.filter((entry) => entry.uid !== message.uid);
     }
+    const existingConflicts = new Set(workspace.conflicts.map((conflict) => conflict.id));
+    const introduced = previewLocalEntries(workspace, localEntries).conflicts
+      .filter((conflict) => !existingConflicts.has(conflict.id));
+    if (introduced.length) {
+      throw new Error("An entry with the same profile key already exists with different values.");
+    }
+    await saveLocalEntries(workspace.workspacePath, installationId, message.revision, localEntries);
     this.databases.clearCache();
     await this.postSnapshot("mutation");
   }
@@ -309,10 +355,62 @@ export class TAcroManManagerPanel implements vscode.Disposable {
         case "openDesktop":
           await vscode.commands.executeCommand("tacroman.openDesktop");
           break;
+        case "dismissLegacySetup":
+          await updateDesktopIntegrationState({ legacyDatabasePath: undefined, databasePath: undefined });
+          break;
         case "selectProfile":
-          await this.selectProfile(message.profileId);
+          await this.selectProfile(message.profileId, message.revision);
           await this.postSnapshot("selection");
           break;
+        case "renameParticipant": {
+          const state = await readDesktopIntegrationState();
+          const installationId = installationIdFromIntegrationState(state);
+          const workspace = await this.databases.loadWorkspace();
+          if (!workspace || !installationId) throw new Error("No TAcroMan workspace is selected.");
+          const renamed = await renameParticipant(workspace.workspacePath, installationId, message.revision, message.displayName);
+          await updateDesktopIntegrationState({ fragmentPath: renamed.localFragmentPath });
+          this.databases.clearCache();
+          await this.postSnapshot("selection");
+          break;
+        }
+        case "importDatabase": {
+          const picked = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            filters: { "Legacy TAcroMan database": ["json"] },
+            title: "Import existing TAcroMan database",
+          });
+          if (!picked?.[0]) break;
+          const state = await readDesktopIntegrationState();
+          const installationId = installationIdFromIntegrationState(state);
+          const workspace = await this.databases.loadWorkspace();
+          if (!workspace || !installationId) throw new Error("No TAcroMan workspace is selected.");
+          const raw = JSON.parse(new TextDecoder("utf8").decode(await vscode.workspace.fs.readFile(picked[0]))) as unknown;
+          const imported = legacyEntries(raw);
+          const byUid = new Map(workspace.localEntries.map((entry) => [entry.uid, entry]));
+          for (const entry of imported) byUid.set(entry.uid, entry);
+          const proposed = [...byUid.values()];
+          const preview = previewLocalEntries(workspace, proposed);
+          const existingDuplicates = workspace.entries.reduce((count, entry) => count + Math.max(0, entry.sources.length - 1), 0);
+          const proposedDuplicates = preview.entries.reduce((count, entry) => count + Math.max(0, entry.sources.length - 1), 0);
+          const duplicateCount = Math.max(0, proposedDuplicates - existingDuplicates);
+          const conflictLabels = preview.conflicts.map((conflict) => conflict.label);
+          const decision = await vscode.window.showWarningMessage(
+            `Import ${imported.length} entries into your participant fragment?`,
+            {
+              modal: true,
+              detail: `Identical duplicates: ${duplicateCount}\nConflicts after import: ${conflictLabels.length ? conflictLabels.join(", ") : "0"}\n\nThe source file and foreign fragments will not be changed.`,
+            },
+            "Import",
+          );
+          if (decision !== "Import") break;
+          await saveLocalEntries(workspace.workspacePath, installationId, message.revision, proposed);
+          await updateDesktopIntegrationState({ legacyDatabasePath: undefined, databasePath: undefined });
+          this.databases.clearCache();
+          await this.postSnapshot("mutation");
+          break;
+        }
         case "saveEntry":
         case "deleteEntry":
           await this.mutate(message);
@@ -320,7 +418,7 @@ export class TAcroManManagerPanel implements vscode.Disposable {
       }
     } catch (error) {
       await this.postError(error);
-      if (error instanceof DatabaseConflictError) await this.postSnapshot("external");
+      if (error instanceof WorkspaceConflictError) await this.postSnapshot("external");
     }
   }
 

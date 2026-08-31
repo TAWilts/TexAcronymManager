@@ -5,7 +5,7 @@
 <h1 align="center">TAcroMan</h1>
 
 <p align="center">
-  <strong>One acronym database. One shared interface. Desktop and Visual Studio Code.</strong>
+  <strong>One shared workspace. One interface. Safe collaboration from Desktop and Visual Studio Code.</strong>
 </p>
 
 <p align="center">
@@ -17,9 +17,9 @@
 </p>
 
 TAcroMan is a profile-driven acronym and glossary manager for LaTeX projects.
-The desktop application and the VS Code extension use the same Webview interface,
-the same database, and the same configuration. Changes made in one frontend appear
-in the other automatically.
+The desktop application and the VS Code extension use the same Webview interface
+and workspace. Every installation owns one small fragment, while TAcroMan merges
+all participants' entries into one shared view automatically.
 
 The data model is not limited to acronyms: profiles define the fields, validation,
 completion behavior, and generated output. This makes TAcroMan suitable for
@@ -34,7 +34,7 @@ completion behavior, and generated output. This makes TAcroMan suitable for
 ### 1. Manage entries in one shared interface
 
 Create, edit, duplicate, filter, and delete entries in the table. The editor form
-stays visible while the table scrolls, so larger databases remain comfortable to
+stays visible while the table scrolls, so larger workspaces remain comfortable to
 work with.
 
 Validation is derived from the active profile. Required fields, duplicate keys,
@@ -84,7 +84,7 @@ definitions, and verbatim content are ignored.
 
 ### 5. Generate profile-driven output
 
-TAcroMan turns the JSON database into the format described by the selected
+TAcroMan turns the merged workspace into the format described by its shared
 profile. Included profiles cover:
 
 | Profile | Typical output |
@@ -110,17 +110,17 @@ maintenance jobs:
 - **Reference audit:** compare bibliography keys with citations used in TeX
   files and inspect unused, unknown, and repeated references.
 - **TeX import:** import compatible declarations from an existing TeX file into
-  the database.
-- **Output control:** choose the active database, profile, output location, and
+  your participant fragment.
+- **Output control:** choose the active workspace, profile, output location, and
   regenerate the TeX file on demand.
 - **Contextual help:** every dialog includes a circled question mark explaining
   its purpose and the steps to complete the task.
 
 ### 7. Stay synchronized
 
-The desktop app and extension watch the shared state and database files. External
-changes are debounced and reloaded automatically, while conflict checks protect
-against silently overwriting newer data.
+The desktop app and extension watch the manifest and all participant fragments.
+Identical duplicates are merged once. Divergent variants are shown in the conflict
+center and block regeneration without replacing the last valid output.
 
 ## 🚀 Getting started
 
@@ -154,8 +154,8 @@ After installation:
 1. Open **TAcroMan** in the Secondary Side Bar or run
    **TAcroMan: Open TAcroMan**.
 2. Select **Open TAcroMan**.
-3. Choose or create a database.
-4. Select a profile.
+3. Choose or create a workspace folder.
+4. Use the shared profile stored in its manifest.
 5. Add your first entry.
 
 The extension embeds the full manager UI. The desktop application does not need
@@ -167,12 +167,13 @@ TAcroMan creates and shares these files:
 
 | File | Purpose |
 | --- | --- |
-| `~/TAcroMan/state.json` | Active database, profile, output mode, and other shared state |
-| `~/TAcroMan/entries.json` | Default entry database |
+| `~/TAcroMan/state.json` | Local installation ID, active workspace and output mode |
+| `~/TAcroMan/workspace/.tacroman-workspace.json` | Workspace identity and authoritative render profile |
+| `~/TAcroMan/workspace/<Name>_<suffix>.tacroman.json` | Entries owned by this installation |
 
-`state.json` is the only authoritative registration and configuration source.
-Remembered paths are not imported from legacy application files, obsolete VS
-Code settings, workspace discovery, or PATH lookup.
+`state.json` is the only authoritative local registration source. An old
+`entries.json` or acronym database is never reused implicitly. Import it explicitly
+with **Import Existing Database**; its original file remains unchanged.
 
 ### Add the generated file to LaTeX
 
@@ -201,7 +202,7 @@ The exact output depends on the selected profile.
           │                                           │
           └────────────── shared Web UI ──────────────┘
                                 │
-                       entries.json / custom DB
+                 shared workspace with fragments
                                 │
                       generated TeX or text file
 ```
@@ -215,8 +216,8 @@ Tkinter interface.
 
 | Menu | Actions |
 | --- | --- |
-| **File** | Open database, create database, import TeX, write output, exit |
-| **Profiles** | Edit the active profile or select another profile file |
+| **File** | Open/create workspace, import old database or TeX, write output, exit |
+| **Profiles** | Edit the workspace profile or copy another profile into the manifest |
 | **Tools** | Citation migration and reference audit |
 | **Language** | Switch the application language |
 | **Help** | Open information and guidance |
@@ -271,8 +272,8 @@ Profiles can define:
 - usage templates copied from the manager.
 
 Use **Profiles → Edit profile** in the desktop application for guided editing and
-validation. Existing profile JSON files remain portable and can be selected from
-both frontends.
+validation. Existing profile JSON files remain portable; the desktop application
+can load one and copy the selected profile into the workspace manifest.
 
 ### Field options
 
@@ -292,10 +293,10 @@ Templates can use all field IDs declared by their command, plus `[[id]]` and
 
 ### Backward compatibility
 
-TAcroMan continues to load legacy schema-v1 acronym databases and migrates them
-to the generic schema-v2 `entries` structure when they are next saved. Older
-single-template render profiles are loaded as a profile with one `acronym`
-command type.
+Legacy schema-v1 and schema-v2 databases can be imported explicitly into the
+current participant fragment. UIDs are preserved and the source file is never
+modified. Older single-template render profiles remain available for importing
+into a workspace manifest.
 
 Exporting is fully profile-driven. TeX importing is intentionally narrower: the
 built-in importer currently understands `\acro{SHORT}{long form}` definitions.
@@ -308,9 +309,9 @@ import adapter.
 
 The TAcroMan Secondary Side Bar provides:
 
-- the active database and its acronym entries;
+- the active workspace and its merged entries;
 - search and filtering;
-- commands to select or reload the database;
+- commands to select or reload the workspace;
 - singular and plural insertion actions;
 - access to the integrated manager;
 - the interactive current-file check.
@@ -326,8 +327,12 @@ Open the Command Palette with `Ctrl+Shift+P` and search for `TAcroMan`.
 | `TAcroMan: Check Current File for Acronyms` | Scan the active TeX file and review replacements interactively |
 | `TAcroMan: Open TAcroMan` | Open the integrated manager |
 | `TAcroMan: Open Desktop Application` | Launch the separately installed desktop application |
-| `TAcroMan: Select Database` | Select an entry database |
-| `TAcroMan: Reload Database` | Reload state and entries from disk |
+| `TAcroMan: Workspace auswählen` / `Select Workspace` | Open or create a workspace folder |
+| `TAcroMan: Workspace erstellen` / `Create Workspace` | Create a workspace in a selected folder |
+| `TAcroMan: Teilnehmernamen ändern` / `Rename Participant` | Rename the local fragment without changing its identity |
+| `TAcroMan: Import Existing Database` | Copy a legacy database into the local fragment |
+| `TAcroMan: Select Database` | Temporary compatibility alias for workspace selection |
+| `TAcroMan: Reload Workspace` | Reload the workspace from disk |
 | `TAcroMan: Select Generated TeX Output` | Select the generated output file |
 | `TAcroMan: Insert \ac{...}` | Insert the selected acronym in singular form |
 | `TAcroMan: Insert \acp{...}` | Insert the selected acronym in plural form |
@@ -348,7 +353,7 @@ options are `tacroman.latexCommands`, `tacroman.maxCompletionItems`,
 TAcroMan preserves three output-location modes:
 
 - `project` writes to the current VS Code project.
-- `database` writes relative to the selected database.
+- `database` writes to `<Workspace>/entries.tex`.
 - `custom` preserves an explicitly selected output path.
 
 When acronym data changes in either frontend, output is regenerated according to
@@ -357,27 +362,30 @@ the shared mode and active profile.
 </details>
 
 <details>
-<summary>Multiple databases and custom profiles</summary>
+<summary>Multiple workspaces and custom profiles</summary>
 
-Use the manager or desktop **File** menu to select another database. Use the
-profile selector or **Profiles** menu to activate a bundled or custom profile.
-The selected paths are stored in `state.json` and become visible to the other
-frontend immediately.
+Use the manager or desktop **File** menu to select another workspace. Selecting
+or editing a profile stores the full active profile in that workspace's manifest,
+so every participant validates, merges and exports by the same rules.
 
 </details>
 
 ## 👥 Working with multiple authors
 
-For a shared LaTeX repository, a practical setup is:
+Put one TAcroMan workspace folder in a shared drive, cloud-sync folder, or Git
+repository and let every author open that folder. Each installation writes only
+its own `<Name>_<suffix>.tacroman.json`; foreign fragments are read-only.
 
-1. Store the project-specific entry database in the repository.
-2. Store a custom profile there as well if the project needs one.
-3. Commit the generated TeX file when collaborators or CI do not run TAcroMan.
-4. Keep personal application state in `~/TAcroMan/state.json`.
+Entries with the same logical key and identical content appear and export once.
+If their fields differ, the conflict center shows the owners and field changes.
+Conflicting entries are withheld from completion and Quick Fixes, and output
+regeneration pauses until an owner aligns, changes, or deletes a local variant.
+The last conflict-free `entries.tex` remains untouched throughout.
 
-TAcroMan watches files changed by Git, another editor, or another running
-frontend. If a save is based on stale data, it is rejected instead of silently
-overwriting the newer file; reload the displayed conflict to continue.
+The watcher retries partially synchronized files, rescans every five seconds and
+rejects stale writes. Invalid manifests, wrong workspace IDs, duplicate
+installation IDs and malformed fragments remain visible workspace errors rather
+than being silently ignored.
 
 ## 🧪 Citation migration
 
@@ -413,7 +421,7 @@ Point the active profile at a file included by the document and let LaTeX
 Workshop rebuild after changes.
 
 If the generated file belongs in the current project, use the `project` output
-mode. For a shared central database, `database` or `custom` may be more suitable.
+mode. For a shared central workspace, `database` or `custom` may be more suitable.
 
 ## 🐧 Linux notes
 

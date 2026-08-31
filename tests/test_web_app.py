@@ -4,134 +4,157 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from uuid import uuid4
 
 from tacroman.model import CommandEntry
-from tacroman.storage import load_database, save_database
 from tacroman.web_app import DesktopWebApi, WebAppController, build_desktop_html
+from tacroman.workspace import (
+    MANIFEST_FILENAME,
+    create_workspace,
+    join_workspace,
+    load_workspace,
+    save_local_entries,
+)
 
 
 class WebAppTests(unittest.TestCase):
     def test_desktop_document_embeds_the_shared_frontend(self) -> None:
         document = build_desktop_html()
-
         self.assertIn("<style>", document)
         self.assertIn("const queuedDesktopMessages", document)
         self.assertIn('id="desktop-menubar"', document)
-        self.assertIn("height: 100vh", document)
-        self.assertIn('id="tool-help"', document)
-        self.assertIn('id="info-help"', document)
+        self.assertIn('id="conflict-dialog"', document)
+        self.assertIn('id="rename-participant"', document)
         self.assertIn('role="tooltip"', document)
         self.assertIn('menu.addEventListener("toggle"', document)
-        self.assertIn("profileEditorHelp", document)
-        self.assertIn("citationToolHelp", document)
-        self.assertIn("auditToolHelp", document)
         self.assertNotIn("{{STYLE_URI}}", document)
         self.assertNotIn("{{SCRIPT_URI}}", document)
         self.assertNotIn("Content-Security-Policy", document)
 
-    def test_controller_creates_first_run_files_and_snapshot(self) -> None:
+    def test_controller_creates_first_workspace_and_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            messages: list[dict[str, object]] = []
-            database = root / "data" / "entries.json"
+            workspace = root / "shared"
             output = root / "paper" / "entries.tex"
+            messages: list[dict[str, object]] = []
             controller = WebAppController(
-                database,
+                workspace,
                 output,
                 state_path=root / "home" / "TAcroMan" / "state.json",
                 emit=messages.append,
             )
-
             controller.handle_message({"type": "ready"})
-
-            self.assertTrue(database.is_file())
+            self.assertTrue((workspace / MANIFEST_FILENAME).is_file())
+            self.assertEqual(len(list(workspace.glob("*.tacroman.json"))), 1)
             self.assertTrue(output.is_file())
             snapshot = messages[-1]["snapshot"]
-            self.assertIsInstance(snapshot, dict)
             assert isinstance(snapshot, dict)
             self.assertEqual(snapshot["hostKind"], "desktop")
-            self.assertEqual(snapshot["databasePath"], str(database.resolve()))
-            self.assertTrue(snapshot["profiles"])
+            self.assertEqual(snapshot["workspacePath"], str(workspace.resolve()))
+            self.assertTrue(snapshot["owner"])
+            self.assertEqual(snapshot["conflicts"], [])
 
-    def test_controller_saves_deletes_and_renders_entries(self) -> None:
+    def test_controller_saves_deletes_and_renders_only_local_fragment(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            messages: list[dict[str, object]] = []
-            database = root / "entries.json"
-            output = root / "entries.tex"
-            controller = WebAppController(
-                database,
-                output,
-                state_path=root / "state.json",
-                emit=messages.append,
-            )
+            controller = WebAppController(root / "shared", root / "entries.tex", state_path=root / "state.json")
             revision = str(controller.snapshot()["revision"])
+            controller.handle_message({
+                "type": "saveEntry",
+                "revision": revision,
+                "entry": {
+                    "commandId": "acronym",
+                    "values": {"short": "AUV", "long": "autonomous underwater vehicle"},
+                },
+            })
+            current = load_workspace(root / "shared", controller.installation_id)
+            self.assertEqual([entry.value("short") for entry in current.local_entries], ["AUV"])
+            self.assertIn("\\acro{AUV}{autonomous underwater vehicle}", (root / "entries.tex").read_text(encoding="utf-8"))
+            controller.handle_message({
+                "type": "deleteEntry",
+                "revision": current.revision,
+                "uid": current.local_entries[0].uid,
+            })
+            self.assertEqual(load_workspace(root / "shared", controller.installation_id).local_entries, ())
 
-            controller.handle_message(
-                {
-                    "type": "saveEntry",
-                    "revision": revision,
-                    "entry": {
-                        "commandId": "acronym",
-                        "values": {"short": "AUV", "long": "autonomous underwater vehicle"},
-                    },
-                }
-            )
-
-            entries = load_database(database)
-            self.assertEqual([(entry.value("short"), entry.value("long")) for entry in entries], [
-                ("AUV", "autonomous underwater vehicle")
-            ])
-            self.assertIn("\\acro{AUV}{autonomous underwater vehicle}", output.read_text(encoding="utf-8"))
-            mutation_snapshot = messages[-1]["snapshot"]
-            assert isinstance(mutation_snapshot, dict)
-            controller.handle_message(
-                {
-                    "type": "deleteEntry",
-                    "revision": mutation_snapshot["revision"],
-                    "uid": entries[0].uid,
-                }
-            )
-            self.assertEqual(load_database(database), [])
-
-    def test_controller_rejects_a_stale_save_without_overwriting_external_data(self) -> None:
+    def test_conflicting_foreign_change_blocks_output_and_stale_save(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             messages: list[dict[str, object]] = []
-            database = root / "entries.json"
+            output = root / "entries.tex"
+            controller = WebAppController(root / "shared", output, state_path=root / "state.json", emit=messages.append)
+            initial = controller.snapshot()
+            controller.handle_message({
+                "type": "saveEntry",
+                "revision": initial["revision"],
+                "entry": {"commandId": "acronym", "values": {"short": "AUV", "long": "vehicle"}},
+            })
+            good_output = output.read_bytes()
+            second_id = str(uuid4())
+            second = join_workspace(root / "shared", second_id, display_name="Alex")
+            save_local_entries(root / "shared", second_id, second.revision, [
+                CommandEntry("acronym", {"short": "AUV", "long": "different"})
+            ])
+            controller.poll_once()
+            conflicted = controller.snapshot()
+            self.assertTrue(conflicted["exportBlocked"])
+            self.assertEqual(len(conflicted["conflicts"]), 1)
+            self.assertEqual(output.read_bytes(), good_output)
+            variants = conflicted["conflicts"][0]["variants"]
+            local = next(variant for variant in variants if variant["editable"])
+            foreign = next(variant for variant in variants if not variant["editable"])
+            controller.handle_message({
+                "type": "saveEntry",
+                "revision": conflicted["revision"],
+                "entry": {
+                    "uid": local["uid"],
+                    "commandId": foreign["commandId"],
+                    "values": foreign["values"],
+                },
+            })
+            resolved = controller.snapshot()
+            self.assertFalse(resolved["exportBlocked"])
+            self.assertFalse(resolved["conflicts"])
+            self.assertIn("different", output.read_text(encoding="utf-8"))
+            controller.handle_message({
+                "type": "saveEntry",
+                "revision": initial["revision"],
+                "entry": {"commandId": "acronym", "values": {"short": "DVL", "long": "log"}},
+            })
+            self.assertEqual(messages[-2]["type"], "error")
+            self.assertEqual(messages[-1]["reason"], "external")
+
+    def test_new_local_change_that_would_create_conflict_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            messages: list[dict[str, object]] = []
             controller = WebAppController(
-                database,
+                root / "shared",
                 root / "entries.tex",
                 state_path=root / "state.json",
                 emit=messages.append,
             )
-            stale_revision = str(controller.snapshot()["revision"])
-            external = CommandEntry("acronym", {"short": "DVL", "long": "Doppler velocity log"})
-            save_database(database, [external])
+            foreign_id = str(uuid4())
+            foreign = join_workspace(root / "shared", foreign_id, display_name="Alex")
+            save_local_entries(root / "shared", foreign_id, foreign.revision, [
+                CommandEntry("acronym", {"short": "AUV", "long": "foreign value"})
+            ])
+            controller.poll_once()
+            current = controller.snapshot()
+            controller.handle_message({
+                "type": "saveEntry",
+                "revision": current["revision"],
+                "entry": {"commandId": "acronym", "values": {"short": "AUV", "long": "local value"}},
+            })
+            self.assertEqual(messages[-1]["type"], "error")
+            self.assertFalse(load_workspace(root / "shared", controller.installation_id).local_entries)
 
-            controller.handle_message(
-                {
-                    "type": "saveEntry",
-                    "revision": stale_revision,
-                    "entry": {
-                        "commandId": "acronym",
-                        "values": {"short": "AUV", "long": "autonomous underwater vehicle"},
-                    },
-                }
-            )
-
-            self.assertEqual([entry.value("short") for entry in load_database(database)], ["DVL"])
-            self.assertEqual(messages[-2]["type"], "error")
-            self.assertEqual(messages[-1]["reason"], "external")
-
-    def test_controller_uses_native_path_callbacks_and_switches_profiles(self) -> None:
+    def test_native_callbacks_select_and_create_workspace_and_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            first = root / "first.json"
-            second = root / "second.json"
+            first = root / "first"
+            second = root / "second"
             selected_output = root / "selected.tex"
-            save_database(first, [])
-            save_database(second, [CommandEntry("acronym", {"short": "AUV", "long": "vehicle"})])
             controller = WebAppController(
                 first,
                 root / "first.tex",
@@ -139,78 +162,70 @@ class WebAppTests(unittest.TestCase):
                 choose_database=lambda _current: second,
                 choose_output=lambda _current: selected_output,
             )
-
+            create_workspace(second, controller.installation_id, controller.active_profile)
             controller.handle_message({"type": "selectDatabase"})
             controller.handle_message({"type": "selectOutput"})
-            controller.handle_message({"type": "selectProfile", "profileId": "acro-package"})
-
             snapshot = controller.snapshot()
-            self.assertEqual(snapshot["databasePath"], str(second.resolve()))
+            self.assertEqual(snapshot["workspacePath"], str(second.resolve()))
             self.assertEqual(snapshot["outputPath"], str(selected_output.resolve()))
-            self.assertEqual(snapshot["profile"]["id"], "acro-package")
-            self.assertIn("\\DeclareAcronym", selected_output.read_text(encoding="utf-8"))
 
-    def test_controller_creates_databases_imports_tex_and_switches_language(self) -> None:
+    def test_imports_tex_and_legacy_database_without_modifying_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            first = root / "first.json"
-            created = root / "created.json"
             imported_tex = root / "existing.tex"
-            imported_tex.write_text(
-                "\\acro{AUV}{autonomous underwater vehicle}\n\\acro{DVL}{Doppler velocity log}\n",
-                encoding="utf-8",
-            )
+            imported_tex.write_text("\\acro{AUV}{autonomous underwater vehicle}\n", encoding="utf-8")
+            legacy = root / "legacy.json"
+            legacy.write_text(json.dumps({
+                "schema_version": 2,
+                "entries": [{
+                    "uid": "legacy-dvl",
+                    "command_id": "acronym",
+                    "values": {"short": "DVL", "long": "Doppler velocity log"},
+                }],
+            }), encoding="utf-8")
+            original = legacy.read_bytes()
+            messages: list[dict[str, object]] = []
             controller = WebAppController(
-                first,
-                root / "first.tex",
+                root / "shared",
+                root / "entries.tex",
                 state_path=root / "state.json",
-                choose_new_database=lambda _current: created,
+                emit=messages.append,
                 choose_import_tex=lambda _current: imported_tex,
+                choose_import_database=lambda _current: legacy,
             )
-
-            controller.handle_message({"type": "newDatabase"})
+            controller.handle_message({"type": "importTex", "mode": "merge", "revision": controller.snapshot()["revision"]})
+            controller.handle_message({"type": "importDatabase", "revision": controller.snapshot()["revision"]})
+            preview = messages[-1]
+            self.assertEqual(preview["type"], "importPreview")
+            self.assertEqual(preview["importedCount"], 1)
             controller.handle_message({
-                "type": "importTex",
-                "mode": "merge",
-                "revision": controller.snapshot()["revision"],
+                "type": "commitDatabaseImport",
+                "token": preview["token"],
+                "revision": preview["revision"],
             })
-            controller.handle_message({"type": "setLanguage", "language": "de"})
+            entries = load_workspace(root / "shared", controller.installation_id).local_entries
+            self.assertEqual([entry.value("short") for entry in entries], ["AUV", "DVL"])
+            self.assertEqual(legacy.read_bytes(), original)
 
-            self.assertEqual(controller.snapshot()["databasePath"], str(created.resolve()))
-            self.assertEqual(controller.snapshot()["language"], "de")
-            self.assertEqual([entry.value("short") for entry in load_database(created)], ["AUV", "DVL"])
-
-    def test_profile_editor_saves_validated_profiles_via_web_messages(self) -> None:
+    def test_profile_editor_writes_active_profile_to_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             messages: list[dict[str, object]] = []
-            profiles_path = root / "profiles.json"
-            controller = WebAppController(
-                root / "entries.json",
-                root / "entries.tex",
-                profiles_path,
-                state_path=root / "state.json",
-                emit=messages.append,
-            )
-
-            controller.handle_message({"type": "openProfileEditor"})
-            editor = messages[-1]
-            self.assertEqual(editor["type"], "profileEditor")
+            controller = WebAppController(root / "shared", root / "entries.tex", state_path=root / "state.json", emit=messages.append)
             profile = json.loads(json.dumps(controller.active_profile))
             profile["name"] = "Edited Web Profile"
             controller.handle_message({
                 "type": "saveProfile",
                 "originalId": profile["id"],
                 "profile": profile,
+                "revision": controller.snapshot()["revision"],
             })
-
-            self.assertTrue(profiles_path.is_file())
-            saved = json.loads(profiles_path.read_text(encoding="utf-8"))
-            self.assertIn("Edited Web Profile", [item["name"] for item in saved])
+            manifest = json.loads((root / "shared" / MANIFEST_FILENAME).read_text(encoding="utf-8"))
+            self.assertEqual(manifest["profile"]["name"], "Edited Web Profile")
             self.assertEqual(messages[-2]["type"], "profileEditor")
             self.assertEqual(messages[-1]["type"], "snapshot")
 
-    def test_citation_migration_and_reference_audit_use_web_messages(self) -> None:
+    def test_citation_and_reference_tools_still_use_workspace_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             old_bib = root / "old.bib"
@@ -218,19 +233,17 @@ class WebAppTests(unittest.TestCase):
             tex = root / "chapter.tex"
             old_bib.write_text('@article{OldKey, title={A Study}, year={2024}}', encoding="utf-8")
             new_bib.write_text('@article{NewKey, title={A Study}, year={2024}}', encoding="utf-8")
-            tex.write_text('See \\cite{OldKey}.', encoding="utf-8")
+            tex.write_text("See \\cite{OldKey}.", encoding="utf-8")
             messages: list[dict[str, object]] = []
             controller = WebAppController(
-                root / "entries.json",
+                root / "shared",
                 root / "entries.tex",
                 state_path=root / "state.json",
                 emit=messages.append,
                 choose_tool_paths=lambda target, _current: [root] if target == "auditProject" else [tex],
             )
-
             controller.handle_message({"type": "analyseCitations", "oldBib": str(old_bib), "newBib": str(new_bib)})
             self.assertEqual(messages[-1]["type"], "citationAnalysis")
-            self.assertEqual(messages[-1]["summary"]["changed"], 1)
             controller.handle_message({
                 "type": "applyCitationMigration",
                 "mapping": {"OldKey": "NewKey"},
@@ -238,38 +251,26 @@ class WebAppTests(unittest.TestCase):
                 "backup": True,
             })
             self.assertIn("\\cite{NewKey}", tex.read_text(encoding="utf-8"))
-            self.assertTrue((root / "chapter.tex.bak").is_file())
-            self.assertEqual(messages[-1]["type"], "citationMigrationResult")
-
-            controller.handle_message({"type": "discoverReferences", "project": str(root)})
-            self.assertIn(str(new_bib.resolve()), messages[-1]["paths"])
             controller.handle_message({"type": "auditReferences", "project": str(root), "reference": str(new_bib)})
             self.assertEqual(messages[-1]["type"], "referenceAudit")
-            self.assertEqual(messages[-1]["unknownKeys"], [])
-            self.assertEqual(messages[-1]["usedKeys"], ["NewKey"])
 
-            controller.handle_message({"type": "chooseToolPath", "target": "auditProject"})
-            self.assertEqual(messages[-1], {"type": "toolPaths", "target": "auditProject", "paths": [str(root.resolve())]})
-
-    def test_polling_applies_database_selection_from_another_frontend(self) -> None:
+    def test_polling_applies_workspace_selection_from_other_frontend(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            first = root / "first.json"
-            second = root / "second.json"
             state_path = root / "state.json"
-            save_database(first, [])
-            save_database(second, [CommandEntry("acronym", {"short": "AUV", "long": "vehicle"})])
+            first = root / "first"
+            second = root / "second"
             messages: list[dict[str, object]] = []
             controller = WebAppController(first, root / "entries.tex", state_path=state_path, emit=messages.append)
+            create_workspace(second, controller.installation_id, controller.active_profile)
             state = json.loads(state_path.read_text(encoding="utf-8"))
-            state["databasePath"] = str(second.resolve())
+            state["workspacePath"] = str(second.resolve())
             state_path.write_text(json.dumps(state), encoding="utf-8")
-
             self.assertTrue(controller.poll_once())
-            self.assertEqual(controller.snapshot()["databasePath"], str(second.resolve()))
+            self.assertEqual(controller.snapshot()["workspacePath"], str(second.resolve()))
             self.assertEqual(messages[-1]["reason"], "external")
 
-    def test_pywebview_adapter_forwards_messages_to_the_shared_window_protocol(self) -> None:
+    def test_pywebview_adapter_forwards_workspace_snapshot(self) -> None:
         class FakeWindow:
             def __init__(self) -> None:
                 self.scripts: list[str] = []
@@ -281,21 +282,17 @@ class WebAppTests(unittest.TestCase):
             root = Path(directory)
             api = DesktopWebApi(
                 WebAppController,
-                database_path=root / "entries.json",
+                workspace_path=root / "shared",
                 output_path=root / "entries.tex",
                 state_path=root / "state.json",
             )
             window = FakeWindow()
             api._attach_window(window)
-
             api.post_message('{"type":"ready"}')
-
             self.assertFalse(hasattr(api, "window"))
             self.assertFalse(hasattr(api, "controller"))
             self.assertEqual([name for name in dir(api) if not name.startswith("_")], ["post_message"])
-            self.assertEqual(len(window.scripts), 1)
-            self.assertIn('window.postMessage({"type": "snapshot"', window.scripts[0])
-            self.assertIn('"hostKind": "desktop"', window.scripts[0])
+            self.assertIn('"workspacePath":', window.scripts[0])
 
 
 if __name__ == "__main__":

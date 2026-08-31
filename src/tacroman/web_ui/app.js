@@ -27,29 +27,40 @@
   let profileEditorState = null;
   let citationState = null;
   let auditState = null;
+  let conflictDraft = null;
+  let promptedLegacyPath = null;
 
   const texts = {
     en: {
-      menuFile: "File", openDatabase: "Open database…", newDatabase: "New database…",
+      menuFile: "File", openDatabase: "Open workspace…", newDatabase: "New workspace…",
+      importDatabase: "Import existing database…",
       importTex: "Import TeX file…", writeOutput: "Write output file", exit: "Exit",
       menuProfiles: "Profiles", editProfile: "Edit active profile…", selectProfiles: "Choose profile file…",
       menuTools: "Tools", citationMigration: "Migrate citation keys…", referenceAudit: "Audit references…",
       menuLanguage: "Language", menuHelp: "Help", help: "Help", about: "About TAcroMan", close: "Close",
       helpTitle: "TAcroMan help",
-      helpText: "Select or create a database, choose a profile and edit entries in the form. Changes are written to the JSON database and generated output. Profile and bibliography tools are available from the desktop menu.",
-      aboutText: "TAcroMan manages profile-defined LaTeX commands from one shared database.",
+      helpText: "Select or create a workspace and edit your entries in the form. Your installation writes only its own participant fragment; the shared profile and merged output apply to everyone. Profile and bibliography tools are available from the desktop menu.",
+      aboutText: "TAcroMan merges profile-defined LaTeX entries from participant-owned workspace fragments.",
       windowHelp: "What is this window for?",
-      generalHelpTooltip: "This window gives you a brief overview of the normal workflow. Read the instructions, close the window, then select a database and profile to start editing.",
-      aboutHelpTooltip: "This window explains the purpose of TAcroMan and the shared database model. No action is required.",
-      databaseLabel: "Database:", outputLabel: "Output:", selectDatabase: "Select database",
+      generalHelpTooltip: "This window gives you a brief overview of the normal workflow. Read the instructions, close the window, then select a workspace to start editing.",
+      aboutHelpTooltip: "This window explains the purpose of TAcroMan and the shared workspace model. No action is required.",
+      databaseLabel: "Workspace:", participantLabel: "Participant:", outputLabel: "Output:", selectDatabase: "Select workspace",
+      renameParticipant: "Rename participant", participantPrompt: "Participant name",
+      conflictCenter: "Workspace conflicts", openConflicts: "Resolve conflicts",
+      conflictHelp: "Different participant fragments contain the same profile key with different values. Edit, align, rename, or delete only your own variant. Output remains at the last conflict-free state.",
+      conflictCount: "Conflicting entries block output generation.", readOnly: "Read-only",
+      workspaceError: "Workspace error", actionRequired: "Action required",
+      alignVariant: "Align my variant", editOwn: "Edit my variant", changeKey: "Change key", deleteOwn: "Delete my variant",
       selectOutput: "Select output", desktopApp: "Desktop app", searchEntries: "Search entries",
-      conflict: "The database changed outside this editor.", reload: "Reload", newEntry: "New entry",
+      conflict: "The workspace changed outside this editor.", reload: "Reload", newEntry: "New entry",
       editEntry: "Edit entry", type: "Type", save: "Save", new: "New", delete: "Delete", loading: "Loading…",
       noOutput: "No generated output selected", noMatches: "No matching entries", noEntries: "No entries yet",
       untitled: "Untitled entry", discard: "Discard the unsaved changes?", unsupported: "This entry type is not part of the active profile.",
-      unsaved: "Unsaved changes", saved: "Saved", reloaded: "Database reloaded", ready: "Ready",
+      unsaved: "Unsaved changes", saved: "Saved", reloaded: "Workspace reloaded", ready: "Ready",
       saving: "Saving…", deleting: "Deleting…", deleteConfirm: "Delete this entry?", changingProfile: "Changing profile…",
       importing: "Importing…",
+      importPreview: "Import {count} entries from {path}?\n\nIdentical duplicates: {duplicates}\nConflicts after import: {conflicts}\n\nOnly your participant fragment will be changed.",
+      legacySetup: "TAcroMan now uses workspace folders. Your previous database was found at:\n\n{path}\n\nSelect it now for an explicit import? The original file will remain unchanged.",
       profileEditorTitle: "Edit profiles", citationToolTitle: "Migrate citation keys",
       auditToolTitle: "Audit references", profileFile: "Profile file", duplicateProfile: "Duplicate profile",
       profileEditorHelp: "Use this window to define how TAcroMan stores and renders command types.\n\n1. Select an existing profile or duplicate one.\n2. Edit its metadata, output settings, and command schema.\n3. Save the profile. TAcroMan validates it and immediately regenerates the output with the selected profile.",
@@ -71,26 +82,36 @@
       exitConfirm: "Close TAcroMan?",
     },
     de: {
-      menuFile: "Datei", openDatabase: "Datenbank öffnen…", newDatabase: "Neue Datenbank…",
+      menuFile: "Datei", openDatabase: "Workspace öffnen…", newDatabase: "Neuer Workspace…",
+      importDatabase: "Bestehende Datenbank importieren…",
       importTex: "TeX-Datei importieren…", writeOutput: "Ausgabedatei schreiben", exit: "Beenden",
       menuProfiles: "Profile", editProfile: "Aktives Profil bearbeiten…", selectProfiles: "Profildatei auswählen…",
       menuTools: "Werkzeuge", citationMigration: "Zitationsschlüssel migrieren…", referenceAudit: "Referenzen prüfen…",
       menuLanguage: "Sprache", menuHelp: "Hilfe", help: "Hilfe", about: "Über TAcroMan", close: "Schließen",
       helpTitle: "TAcroMan-Hilfe",
-      helpText: "Wähle oder erstelle eine Datenbank, wähle ein Profil und bearbeite die Einträge in der Eingabemaske. Änderungen werden in die JSON-Datenbank und die generierte Ausgabedatei geschrieben. Profil- und Literaturwerkzeuge findest du im Desktop-Menü.",
-      aboutText: "TAcroMan verwaltet profildefinierte LaTeX-Befehle aus einer gemeinsamen Datenbank.",
+      helpText: "Wähle oder erstelle einen Workspace und bearbeite deine Einträge in der Eingabemaske. Deine Installation schreibt nur ihr eigenes Teilnehmerfragment; gemeinsames Profil und zusammengeführte Ausgabe gelten für alle. Profil- und Literaturwerkzeuge findest du im Desktop-Menü.",
+      aboutText: "TAcroMan führt profildefinierte LaTeX-Einträge aus nutzereigenen Workspace-Fragmenten zusammen.",
       windowHelp: "Wofür ist dieses Fenster da?",
-      generalHelpTooltip: "Dieses Fenster gibt dir einen kurzen Überblick über den normalen Arbeitsablauf. Lies die Hinweise, schließe das Fenster und wähle danach eine Datenbank und ein Profil aus, um mit der Bearbeitung zu beginnen.",
-      aboutHelpTooltip: "Dieses Fenster erklärt den Zweck von TAcroMan und das gemeinsame Datenbankmodell. Du musst hier nichts einstellen.",
-      databaseLabel: "Datenbank:", outputLabel: "Ausgabe:", selectDatabase: "Datenbank auswählen",
+      generalHelpTooltip: "Dieses Fenster gibt dir einen kurzen Überblick über den normalen Arbeitsablauf. Lies die Hinweise, schließe das Fenster und wähle danach einen Workspace aus, um mit der Bearbeitung zu beginnen.",
+      aboutHelpTooltip: "Dieses Fenster erklärt den Zweck von TAcroMan und das gemeinsame Workspace-Modell. Du musst hier nichts einstellen.",
+      databaseLabel: "Workspace:", participantLabel: "Teilnehmer:", outputLabel: "Ausgabe:", selectDatabase: "Workspace auswählen",
+      renameParticipant: "Teilnehmer umbenennen", participantPrompt: "Teilnehmername",
+      conflictCenter: "Workspace-Konflikte", openConflicts: "Konflikte lösen",
+      conflictHelp: "Verschiedene Teilnehmerfragmente enthalten denselben Profilschlüssel mit unterschiedlichen Werten. Du kannst nur deine eigene Variante bearbeiten, angleichen, umbenennen oder löschen. Die letzte konfliktfreie Ausgabe bleibt bestehen.",
+      conflictCount: "Widersprüchliche Einträge blockieren die Ausgabe.",
+      workspaceError: "Workspace-Fehler", actionRequired: "Aktion erforderlich",
+      readOnly: "Schreibgeschützt", alignVariant: "Meine Variante angleichen", changeKey: "Schlüssel ändern",
+      editOwn: "Meine Variante bearbeiten", deleteOwn: "Meine Variante löschen",
       selectOutput: "Ausgabe auswählen", desktopApp: "Desktop-App", searchEntries: "Einträge durchsuchen",
-      conflict: "Die Datenbank wurde außerhalb dieses Editors geändert.", reload: "Neu laden", newEntry: "Neuer Eintrag",
+      conflict: "Der Workspace wurde außerhalb dieses Editors geändert.", reload: "Neu laden", newEntry: "Neuer Eintrag",
       editEntry: "Eintrag bearbeiten", type: "Typ", save: "Speichern", new: "Neu", delete: "Löschen", loading: "Laden…",
       noOutput: "Keine Ausgabedatei ausgewählt", noMatches: "Keine passenden Einträge", noEntries: "Noch keine Einträge",
       untitled: "Unbenannter Eintrag", discard: "Ungespeicherte Änderungen verwerfen?", unsupported: "Dieser Eintragstyp gehört nicht zum aktiven Profil.",
-      unsaved: "Ungespeicherte Änderungen", saved: "Gespeichert", reloaded: "Datenbank neu geladen", ready: "Bereit",
+      unsaved: "Ungespeicherte Änderungen", saved: "Gespeichert", reloaded: "Workspace neu geladen", ready: "Bereit",
       saving: "Wird gespeichert…", deleting: "Wird gelöscht…", deleteConfirm: "Diesen Eintrag löschen?", changingProfile: "Profil wird gewechselt…",
       importing: "Import läuft…",
+      importPreview: "{count} Einträge aus {path} importieren?\n\nIdentische Duplikate: {duplicates}\nKonflikte nach dem Import: {conflicts}\n\nNur dein eigenes Teilnehmerfragment wird geändert.",
+      legacySetup: "TAcroMan verwendet jetzt Workspace-Ordner. Deine bisherige Datenbank wurde hier gefunden:\n\n{path}\n\nMöchtest du sie jetzt ausdrücklich importieren? Die Ursprungsdatei bleibt unverändert.",
       profileEditorTitle: "Profile bearbeiten", citationToolTitle: "Zitationsschlüssel migrieren",
       auditToolTitle: "Referenzen prüfen", profileFile: "Profildatei", duplicateProfile: "Profil duplizieren",
       profileEditorHelp: "In diesem Fenster legst du fest, wie TAcroMan Befehlstypen speichert und ausgibt.\n\n1. Wähle ein vorhandenes Profil oder dupliziere es.\n2. Bearbeite Metadaten, Ausgabeoptionen und das Befehlsschema.\n3. Speichere das Profil. TAcroMan prüft es und erzeugt die Ausgabe sofort mit dem gewählten Profil neu.",
@@ -274,7 +295,12 @@
         usage_template: profileFormValue("profile-usage"),
         commands: commandSchema,
       };
-      host.postMessage({ type: "saveProfile", originalId: profileEditorState.originalId, profile });
+      host.postMessage({
+        type: "saveProfile",
+        originalId: profileEditorState.originalId,
+        profile,
+        revision: snapshot?.revision,
+      });
       status.textContent = text("saving");
     }, false));
     elements.toolBody.append(actions, status);
@@ -483,7 +509,7 @@
   }
 
   function currentEntry() {
-    return snapshot?.entries.find((entry) => entry.uid === selectedUid) || null;
+    return conflictDraft || snapshot?.entries.find((entry) => entry.uid === selectedUid) || null;
   }
 
   function confirmDiscard() {
@@ -493,6 +519,7 @@
   function selectEntry(uid) {
     if (uid === selectedUid || !confirmDiscard()) return;
     selectedUid = uid;
+    conflictDraft = null;
     draftCommandId = snapshot.entries.find((entry) => entry.uid === uid)?.commandId || null;
     dirty = false;
     renderList();
@@ -521,7 +548,10 @@
       const details = el("span", "entry-details", secondaryValue(entry));
       const command = commandForEntry(entry);
       const badge = el("span", "entry-command", command?.label || entry.commandId);
-      button.append(title, details, badge);
+      const sourceLabels = (entry.sources || []).map((source) => `${source.owner} (${source.fragment})`);
+      const owners = el("span", "entry-sources", sourceLabels.join(", "));
+      owners.title = sourceLabels.join("\n");
+      button.append(title, details, badge, owners);
       elements.entryList.append(button);
     }
   }
@@ -565,27 +595,128 @@
     elements.formTitle.textContent = entry ? text("editEntry") : text("newEntry");
     elements.formDescription.textContent = command?.description
       || (entry ? text("unsupported") : "");
-    elements.deleteButton.hidden = !entry;
-    elements.saveButton.disabled = !command;
+    const editable = !entry || entry.editable !== false;
+    elements.deleteButton.hidden = !entry || !editable;
+    elements.saveButton.disabled = !command || !editable;
+    elements.command.disabled = !editable;
     if (!command) return;
     for (const field of command.fields) {
-      elements.formFields.append(fieldControl(field, entry?.values[field.id] || ""));
+      const wrapper = fieldControl(field, entry?.values[field.id] || "");
+      wrapper.querySelector("input, textarea").disabled = !editable;
+      elements.formFields.append(wrapper);
     }
+  }
+
+  function editConflictVariant(variant, focusKey = false) {
+    if (!variant?.editable || !confirmDiscard()) return;
+    conflictDraft = { ...variant, editable: true, localUid: variant.uid };
+    selectedUid = variant.uid;
+    draftCommandId = variant.commandId;
+    dirty = false;
+    elements.conflictDialog.close();
+    renderList();
+    renderForm();
+    if (focusKey) {
+      const command = snapshot.profile.commands.find((item) => item.id === variant.commandId);
+      const keyField = command?.fields.find((field) => field.comparisonGroup);
+      const control = [...elements.formFields.querySelectorAll("input, textarea")]
+        .find((item) => item.name === keyField?.id);
+      control?.focus();
+      control?.select?.();
+    }
+  }
+
+  function alignConflict(conflict, target) {
+    const local = conflict.variants.find((variant) => variant.editable);
+    if (!local || !target || !window.confirm(text("alignVariant") + "?")) return;
+    host.postMessage({
+      type: "saveEntry",
+      revision: snapshot.revision,
+      entry: { uid: local.uid, commandId: target.commandId, values: target.values },
+    });
+    elements.conflictDialog.close();
+    setStatus(text("saving"), "info");
+  }
+
+  function renderConflictCenter() {
+    elements.conflictBody.replaceChildren();
+    for (const conflict of snapshot?.conflicts || []) {
+      const section = el("section", "tool-section conflict-section");
+      section.append(el("h3", "", conflict.label));
+      const variants = el("div", "conflict-variants");
+      const fieldNames = new Set(conflict.variants.flatMap((variant) => Object.keys(variant.values || {})));
+      const differingFields = new Set([...fieldNames].filter((field) =>
+        new Set(conflict.variants.map((variant) => variant.values?.[field] || "")).size > 1
+      ));
+      for (const variant of conflict.variants) {
+        const card = el("article", `conflict-variant${variant.editable ? " own" : ""}`);
+        card.append(el("h4", "", `${variant.owner} · ${variant.fragment}${variant.editable ? " · " + text("actionRequired") : " · " + text("readOnly")}`));
+        card.append(el("div", "entry-command", variant.commandId));
+        const values = el("dl", "conflict-values");
+        for (const key of fieldNames) {
+          const className = differingFields.has(key) ? "conflict-different" : "";
+          values.append(el("dt", className, key), el("dd", className, variant.values?.[key] || ""));
+        }
+        card.append(values);
+        const actions = el("div", "tool-actions");
+        if (variant.editable) {
+          const edit = el("button", "button secondary", text("editOwn"));
+          edit.type = "button";
+          edit.addEventListener("click", () => editConflictVariant(variant));
+          const changeKey = el("button", "button secondary", text("changeKey"));
+          changeKey.type = "button";
+          changeKey.addEventListener("click", () => editConflictVariant(variant, true));
+          const remove = el("button", "button danger", text("deleteOwn"));
+          remove.type = "button";
+          remove.addEventListener("click", () => {
+            if (!window.confirm(text("deleteConfirm"))) return;
+            host.postMessage({ type: "deleteEntry", revision: snapshot.revision, uid: variant.uid });
+            elements.conflictDialog.close();
+          });
+          actions.append(edit, changeKey, remove);
+        } else if (conflict.localUids?.length) {
+          const align = el("button", "button secondary", text("alignVariant"));
+          align.type = "button";
+          align.addEventListener("click", () => alignConflict(conflict, variant));
+          actions.append(align);
+        }
+        card.append(actions);
+        variants.append(card);
+      }
+      section.append(variants);
+      elements.conflictBody.append(section);
+    }
+    if (!snapshot?.conflicts?.length) elements.conflictBody.append(el("div", "empty", text("noResults")));
   }
 
   function applySnapshot(next, reason) {
     if (dirty && reason === "external" && snapshot?.revision !== next.revision) {
       deferredSnapshot = next;
       elements.conflict.hidden = false;
-      setStatus("The database changed outside this editor.", "warning");
+      setStatus(text("conflict"), "warning");
       return;
     }
     snapshot = next;
+    applyLanguage(next.language || language);
+    if (next.legacyDatabasePath && promptedLegacyPath !== next.legacyDatabasePath) {
+      promptedLegacyPath = next.legacyDatabasePath;
+      setTimeout(() => {
+        const prompt = text("legacySetup").replace("{path}", next.legacyDatabasePath);
+        if (window.confirm(prompt)) {
+          host.postMessage({ type: "importDatabase", revision: next.revision });
+        } else {
+          host.postMessage({ type: "dismissLegacySetup" });
+        }
+      }, 0);
+    }
+    conflictDraft = null;
     deferredSnapshot = null;
     elements.conflict.hidden = true;
-    applyLanguage(next.language || language);
-    elements.databasePath.textContent = next.databasePath;
-    elements.databasePath.title = next.databasePath;
+    elements.databasePath.textContent = next.workspacePath;
+    elements.databasePath.title = next.workspacePath;
+    elements.participantName.textContent = next.owner?.display_name || "";
+    elements.fragmentPath.textContent = next.fragmentPath || "";
+    elements.fragmentPath.title = next.fragmentPath || "";
     elements.outputPath.textContent = next.outputPath || text("noOutput");
     elements.profileSelect.replaceChildren();
     for (const profile of next.profiles || [{ id: next.profile.id, name: next.profile.name }]) {
@@ -596,6 +727,12 @@
     }
     elements.openDesktop.hidden = next.hostKind === "desktop";
     elements.desktopMenubar.hidden = next.hostKind !== "desktop";
+    elements.workspaceConflicts.hidden = !next.conflicts?.length && !next.workspaceError;
+    elements.workspaceConflictText.textContent = next.workspaceError
+      ? `${text("workspaceError")}: ${next.workspaceError}`
+      : (next.conflicts?.length ? `${next.conflicts.length} · ${text("conflictCount")}` : "");
+    elements.openConflicts.hidden = !next.conflicts?.length;
+    renderConflictCenter();
     if (selectedUid && !next.entries.some((entry) => entry.uid === selectedUid)) selectedUid = null;
     if (selectedUid) draftCommandId = next.entries.find((entry) => entry.uid === selectedUid)?.commandId || null;
     dirty = false;
@@ -617,7 +754,7 @@
       type: "saveEntry",
       revision: snapshot.revision,
       entry: {
-        uid: selectedUid || undefined,
+        uid: currentEntry()?.localUid || selectedUid || undefined,
         commandId: elements.command.value,
         values,
       },
@@ -626,17 +763,19 @@
   }
 
   function deleteEntry() {
-    if (!snapshot || !selectedUid || !window.confirm(text("deleteConfirm"))) return;
-    host.postMessage({ type: "deleteEntry", revision: snapshot.revision, uid: selectedUid });
+    const uid = currentEntry()?.localUid || selectedUid;
+    if (!snapshot || !uid || !window.confirm(text("deleteConfirm"))) return;
+    host.postMessage({ type: "deleteEntry", revision: snapshot.revision, uid });
     setStatus(text("deleting"), "info");
   }
 
   function initialize() {
     for (const id of [
-      "database-path", "output-path", "profile-select", "search", "count", "entry-list", "editor-form",
+      "database-path", "fragment-path", "participant-name", "output-path", "profile-select", "search", "count", "entry-list", "editor-form",
       "form-title", "form-description", "command", "form-fields", "new-button", "delete-button",
-      "save-button", "select-database", "select-output", "open-desktop", "status", "conflict", "reload-conflict",
-      "desktop-menubar", "menu-open-database", "menu-new-database", "menu-import-tex", "menu-write-output",
+      "save-button", "select-database", "rename-participant", "select-output", "open-desktop", "status", "conflict", "reload-conflict",
+      "workspace-conflicts", "workspace-conflict-text", "open-conflicts", "conflict-dialog", "conflict-body", "conflict-close",
+      "desktop-menubar", "menu-open-database", "menu-new-database", "menu-import-database", "menu-import-tex", "menu-write-output",
       "menu-exit", "menu-edit-profile", "menu-select-profiles", "menu-citation-migration", "menu-reference-audit",
       "menu-language-de", "menu-language-en", "menu-help", "menu-about", "info-dialog", "info-title", "info-content",
       "info-help", "info-help-tooltip", "tool-dialog", "tool-title", "tool-body", "tool-close", "tool-help", "tool-help-tooltip",
@@ -651,6 +790,7 @@
         return;
       }
       selectedUid = null;
+      conflictDraft = null;
       draftCommandId = nextCommandId;
       dirty = false;
       renderList();
@@ -659,6 +799,7 @@
     elements.newButton.addEventListener("click", () => {
       if (!confirmDiscard()) return;
       selectedUid = null;
+      conflictDraft = null;
       draftCommandId = elements.command.value || snapshot?.profile.commands[0]?.id || null;
       dirty = false;
       renderList();
@@ -667,10 +808,20 @@
     });
     elements.deleteButton.addEventListener("click", deleteEntry);
     elements.selectDatabase.addEventListener("click", () => host.postMessage({ type: "selectDatabase" }));
+    elements.renameParticipant.addEventListener("click", () => {
+      const displayName = window.prompt(text("participantPrompt"), snapshot?.owner?.display_name || "");
+      if (displayName?.trim()) {
+        host.postMessage({ type: "renameParticipant", revision: snapshot?.revision, displayName: displayName.trim() });
+      }
+    });
     elements.selectOutput.addEventListener("click", () => host.postMessage({ type: "selectOutput" }));
     elements.openDesktop.addEventListener("click", () => host.postMessage({ type: "openDesktop" }));
     elements.menuOpenDatabase.addEventListener("click", () => host.postMessage({ type: "selectDatabase" }));
     elements.menuNewDatabase.addEventListener("click", () => host.postMessage({ type: "newDatabase" }));
+    elements.menuImportDatabase.addEventListener("click", () => {
+      host.postMessage({ type: "importDatabase", revision: snapshot?.revision });
+      setStatus(text("importing"), "info");
+    });
     elements.menuImportTex.addEventListener("click", () => {
       if (!window.confirm(text("importConfirm"))) return;
       const mode = snapshot?.entries.length && window.confirm(text("replaceConfirm")) ? "replace" : "merge";
@@ -682,7 +833,10 @@
       if (window.confirm(text("exitConfirm"))) host.postMessage({ type: "exitApp" });
     });
     elements.menuEditProfile.addEventListener("click", () => host.postMessage({ type: "openProfileEditor" }));
-    elements.menuSelectProfiles.addEventListener("click", () => host.postMessage({ type: "selectProfiles" }));
+    elements.menuSelectProfiles.addEventListener("click", () => host.postMessage({
+      type: "selectProfiles",
+      revision: snapshot?.revision,
+    }));
     elements.menuCitationMigration.addEventListener("click", openCitationTool);
     elements.menuReferenceAudit.addEventListener("click", openAuditTool);
     elements.menuLanguageDe.addEventListener("click", () => host.postMessage({ type: "setLanguage", language: "de" }));
@@ -690,6 +844,11 @@
     elements.menuHelp.addEventListener("click", () => showInfo(text("helpTitle"), text("helpText"), "generalHelpTooltip"));
     elements.menuAbout.addEventListener("click", () => showInfo("TAcroMan", text("aboutText"), "aboutHelpTooltip"));
     elements.toolClose.addEventListener("click", () => elements.toolDialog.close());
+    elements.openConflicts.addEventListener("click", () => {
+      renderConflictCenter();
+      elements.conflictDialog.showModal();
+    });
+    elements.conflictClose.addEventListener("click", () => elements.conflictDialog.close());
     elements.desktopMenubar.addEventListener("click", (event) => {
       if (event.target.closest("button")) closeMenus();
     });
@@ -712,7 +871,11 @@
       selectedUid = null;
       draftCommandId = null;
       dirty = false;
-      host.postMessage({ type: "selectProfile", profileId: elements.profileSelect.value });
+      host.postMessage({
+        type: "selectProfile",
+        profileId: elements.profileSelect.value,
+        revision: snapshot?.revision,
+      });
       setStatus(text("changingProfile"), "info");
     });
     elements.reloadConflict.addEventListener("click", () => {
@@ -724,6 +887,20 @@
     window.addEventListener("message", (event) => {
       const message = event.data;
       if (message?.type === "snapshot") applySnapshot(message.snapshot, message.reason);
+      if (message?.type === "importPreview") {
+        const conflictLabel = message.conflicts?.length ? message.conflicts.join(", ") : "0";
+        const prompt = text("importPreview")
+          .replace("{count}", String(message.importedCount))
+          .replace("{path}", message.path)
+          .replace("{duplicates}", String(message.identicalDuplicates))
+          .replace("{conflicts}", conflictLabel);
+        if (window.confirm(prompt)) {
+          host.postMessage({ type: "commitDatabaseImport", token: message.token, revision: message.revision });
+          setStatus(text("importing"), "info");
+        } else {
+          setStatus(text("ready"), "info");
+        }
+      }
       if (message?.type === "error") {
         setStatus(message.message, "error");
         if (elements.toolDialog.open) {

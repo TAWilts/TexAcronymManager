@@ -22,14 +22,14 @@
 The Tex Acronym Manager (TAcroMan) helps you use acronyms consistently while writing LaTeX documents.
 
 Instead of repeatedly looking up acronym keys or manually replacing plain text,
-TAcroMan connects your acronym database directly to Visual Studio Code and provides:
+TAcroMan connects a shared acronym workspace directly to Visual Studio Code and provides:
 
 - acronym-aware completion for commands such as `\ac{...}`;
 - suggestions for acronyms written as plain text;
 - lookup by both **short form** and **long form**;
 - an integrated acronym browser in the VS Code sidebar;
 - interactive scanning and replacement of acronyms in existing text;
-- live synchronization when the acronym database changes.
+- live synchronization of all participant fragments.
 
 Use **Ctrl+Space** (`Ctrl+Whitespace`) to see the suggested acronyms.
 
@@ -51,7 +51,7 @@ Start typing an acronym command:
 \ac{AU
 ```
 Then press **Ctrl+Space** (`Ctrl+Whitespace`)(as it always will be...).
-TAcroMan searches the active database and suggests matching acronyms:
+TAcroMan searches the merged workspace and suggests matching acronyms:
 
 ```tex
 \ac{AUV}
@@ -108,8 +108,8 @@ TAcroMan can still find:
 \ac{AUV}
 ```
 
-This works through normal VS Code IntelliSense and lets you search the acronym
-database by both abbreviation and meaning.
+This works through normal VS Code IntelliSense and lets you search the merged
+workspace by both abbreviation and meaning.
 
 ---
 
@@ -119,17 +119,17 @@ TAcroMan adds its own view to the **Secondary Side Bar**.
 
 There you can:
 
-- browse all acronyms in the active database;
+- browse all acronyms in the active workspace;
 - search and filter the acronym list;
 - see short and long forms at a glance;
 - insert `\ac{...}` or `\acp{...}`;
-- select or reload the active database;
+- select or reload the active workspace;
 - open the integrated editor to add, edit, or delete entries.
 
 The optional desktop application can still be launched through
 **TAcroMan: Open Desktop Application**.
 
-Changes to the database are detected automatically — there is normally no need
+Workspace changes are detected automatically — there is normally no need
 to reload the extension manually.
 
 ---
@@ -178,42 +178,36 @@ Install **TAcroMan** from the Visual Studio Code Extensions view.
 
 ---
 
-### 2. Create or select an acronym database
+### 2. Create or select a TAcroMan workspace
 
-On first use, TAcroMan creates `~/TAcroMan/entries.json` and keeps the shared
-UI/extension state in `~/TAcroMan/state.json`. This state file is the only
-source used for remembered paths; older integration files, obsolete VS Code
-path settings, and workspace database discovery are deliberately ignored.
+On first use, TAcroMan creates `~/TAcroMan/workspace` and keeps the local
+UI/extension state in `~/TAcroMan/state.json`. A workspace contains one manifest
+with the shared render profile and one `*.tacroman.json` fragment per installation.
 
 1. Open the Command Palette with `Ctrl+Shift+P` and run
    **TAcroMan: Open TAcroMan** or click **Open TAcroMan** in the sidebar.
 2. Create your first acronym entry in the integrated TAcroMan editor and save it.
 
 The extension reloads automatically. The generated `entries.tex` defaults to
-the current VS Code project folder and is updated after every database change.
+the current VS Code project folder and is updated after every conflict-free change.
 
-**Using an existing database**
+**Joining a workspace or importing old data**
 
-Run **TAcroMan: Select Database** from the Command Palette or use
-**Select database** in the integrated editor. The separately installed desktop
-application remains available through **TAcroMan: Open Desktop Application**.
+Run **TAcroMan: Select Workspace** from the Command Palette and select the shared
+folder. Use **TAcroMan: Import Existing Database** to copy an old schema-v1 or
+schema-v2 database into your own fragment. The source file is not modified.
+**Select Database** remains temporarily available as an alias.
 
 ### Working with multiple authors
 
-The `acronyms.json` file is the shared source of truth for the acronym
-database. If several authors work on the same project, keep this file
-synchronized between their computers using a suitable method:
+Put the whole workspace in a shared drive, cloud-sync folder, or Git repository.
+Every installation creates and writes only its own readable fragment, such as
+`Peter_a8d99xQr.tacroman.json`; all foreign fragments remain read-only.
 
-- **Git** is recommended. Commit and push changes to `acronyms.json`, and pull
-  the latest version before editing it.
-- A cloud-synchronized folder can also be used, but simultaneous edits or
-  synchronization conflicts may overwrite changes. Use this option with care
-  and avoid editing the database concurrently on multiple computers.
-
-After synchronizing the file, point TAcroMan to the local copy. In the VS Code
-extension, use **TAcroMan: Select Database**. In the desktop application, select the corresponding
-database path in the upper-right corner or use the database-selection command.
-Once the path is set, all authors can use the same acronym database.
+Identical entries from several fragments appear and export once. If the same
+logical key has different fields, TAcroMan shows every variant and owner in the
+conflict center. Those entries are withheld from completion and Quick Fixes, and
+the last valid output stays unchanged until an owner resolves the conflict.
 
 ---
 
@@ -233,20 +227,17 @@ AUV
 autonomous underwater
 ```
 
-or open the TAcroMan sidebar and browse the database directly.
+or open the TAcroMan sidebar and browse the merged workspace directly.
 
 ---
 
-## 🔄 Live database synchronization
+## 🔄 Live workspace synchronization
 
-The active JSON database and the shared `~/TAcroMan/state.json` file are watched automatically.
-
-When an acronym is added, edited, or deleted in either frontend (or directly in
-the JSON file), the other frontend updates automatically and regenerates the
-selected output file.
-
-This also works when the database is located outside the current VS Code
-workspace.
+The workspace manifest, every `*.tacroman.json` fragment, and the shared local
+`~/TAcroMan/state.json` are watched automatically. Events are debounced, temporary
+read failures are retried, and a periodic rescan catches missed cloud-sync events.
+Invalid workspace files block regeneration without discarding the last valid UI
+state or output file.
 
 ---
 
@@ -256,10 +247,10 @@ The sidebar provides quick access to the most common actions:
 
 - **Check current file for acronyms**
 - **Open TAcroMan**
-- view the active database
+- view the active workspace
 - search/filter acronyms
-- reload the database
-- select another database
+- reload the workspace
+- select another workspace
 - insert singular or plural acronym commands
 
 Right-click an acronym to insert it directly into the active LaTeX document.
@@ -275,8 +266,12 @@ Open the Command Palette with `Ctrl+Shift+P` and search for **TAcroMan**.
 | **TAcroMan: Check Current File for Acronyms** | Scan the active `.tex` file and review replacements interactively |
 | **TAcroMan: Open TAcroMan** | Open the integrated acronym manager |
 | **TAcroMan: Open Desktop Application** | Open the optional Python desktop application |
-| **TAcroMan: Select Database** | Select an `acronyms.json` database |
-| **TAcroMan: Reload Database** | Force the current database to reload |
+| **TAcroMan: Select Workspace** | Open or create a workspace folder |
+| **TAcroMan: Create Workspace** | Create a workspace in a selected folder |
+| **TAcroMan: Rename Participant** | Rename your fragment while keeping its stable identity |
+| **TAcroMan: Import Existing Database** | Copy legacy entries into your fragment |
+| **TAcroMan: Select Database** | Temporary alias for workspace selection |
+| **TAcroMan: Reload Workspace** | Force the current workspace to reload |
 | **TAcroMan: Insert `\ac{...}`** | Insert the selected acronym in singular form |
 | **TAcroMan: Insert `\acp{...}`** | Insert the selected acronym in plural form |
 
@@ -344,7 +339,7 @@ acp
 ### `tacroman.inferPlainTextPlurals`
 
 Allows TAcroMan to recognize simple plural forms even when no explicit plural is
-stored in the database.
+stored in the workspace.
 
 ---
 
@@ -369,12 +364,12 @@ The VS Code extension is part of the larger
 [TAcroMan project](https://github.com/TAWilts/TexAcronymManager).
 
 The integrated editor and desktop application render the same shared web
-interface and manage the same JSON database, profiles, and generated output:
+interface and manage the same workspace, profile, conflicts, and generated output:
 
 ```text
-Integrated editor ─┐
-                   ├─ acronyms.json ─ entries.tex
-Desktop app ───────┘
+Integrated editor ─┐          ┌─ Anna_xxxxxxxx.tacroman.json
+                   ├─ workspace ─ Peter_yyyyyyyy.tacroman.json ─ entries.tex
+Desktop app ───────┘          └─ .tacroman-workspace.json
 ```
 
 The desktop host is installed with the Python `tacroman` package and uses
@@ -382,13 +377,11 @@ pywebview for its native window. Its desktop-only menu includes the former
 file, profile, tool, language, and help actions. Profile editing, citation
 migration, and reference auditing run entirely in the shared Web interface.
 
-The database remains a normal JSON file, so the extension does not lock you into
-a proprietary document format.
+The workspace remains a folder of readable JSON files, with metadata markers that
+prevent unrelated JSON files from being interpreted as TAcroMan data.
 
 ## 🧭 Roadmap
 
-- Develop a safer cloud-based synchronization method for shared acronym
-  databases.
 - Suggest converting a word or phrase to an acronym command when it occurs a
   configurable number of times in the document.
 - Add an online acronym check to determine whether the spelling is correct,

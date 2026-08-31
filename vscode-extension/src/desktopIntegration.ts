@@ -1,6 +1,8 @@
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { createWorkspace, DEFAULT_WORKSPACE_PROFILE, joinWorkspace, MANIFEST_FILENAME } from "./workspace";
 
 export type OutputMode = "project" | "database" | "custom";
 
@@ -11,7 +13,11 @@ export interface DesktopLauncher {
 
 export interface DesktopIntegrationState {
   version?: unknown;
+  workspacePath?: unknown;
+  fragmentPath?: unknown;
+  installationId?: unknown;
   databasePath?: unknown;
+  legacyDatabasePath?: unknown;
   outputPath?: unknown;
   outputMode?: unknown;
   profilesPath?: unknown;
@@ -25,10 +31,10 @@ export interface DesktopIntegrationState {
 export function desktopLaunchArguments(
   launcherArguments: readonly string[],
   extraArguments: readonly string[],
-  databasePath?: string,
+  workspacePath?: string,
   outputPath?: string,
 ): string[] {
-  const databaseArguments = databasePath ? ["--database", databasePath] : [];
+  const databaseArguments = workspacePath ? ["--workspace", workspacePath] : [];
   const outputArguments = outputPath ? ["--output", outputPath] : [];
   return [...launcherArguments, ...extraArguments, ...databaseArguments, ...outputArguments];
 }
@@ -45,8 +51,8 @@ export function desktopIntegrationStatePath(
   return path.join(tacromanUserDirectory(home), "state.json");
 }
 
-export function defaultDatabasePath(home: string = os.homedir()): string {
-  return path.join(tacromanUserDirectory(home), "entries.json");
+export function defaultWorkspacePath(home: string = os.homedir()): string {
+  return path.join(tacromanUserDirectory(home), "workspace");
 }
 
 function objectState(raw: unknown): DesktopIntegrationState | undefined {
@@ -58,6 +64,19 @@ function objectState(raw: unknown): DesktopIntegrationState | undefined {
 
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+export function workspacePathFromIntegrationState(raw: unknown): string | undefined {
+  return nonEmptyString(objectState(raw)?.workspacePath);
+}
+
+export function fragmentPathFromIntegrationState(raw: unknown): string | undefined {
+  return nonEmptyString(objectState(raw)?.fragmentPath);
+}
+
+export function installationIdFromIntegrationState(raw: unknown): string | undefined {
+  const value = nonEmptyString(objectState(raw)?.installationId);
+  return value && /^[0-9a-f-]{36}$/i.test(value) ? value : undefined;
 }
 
 export function databasePathFromIntegrationState(raw: unknown): string | undefined {
@@ -118,8 +137,14 @@ export async function updateDesktopIntegrationState(
   statePath: string = desktopIntegrationStatePath(),
 ): Promise<DesktopIntegrationState> {
   const current = await readDesktopIntegrationState(statePath) ?? {};
-  const next: DesktopIntegrationState = { ...current, ...changes, version: 1 };
+  const next: DesktopIntegrationState = { ...current, ...changes, version: 2 };
   delete next.last_database_path;
+  if (nonEmptyString(next.workspacePath)) {
+    delete next.databasePath;
+    delete next.profilesPath;
+    delete next.selectedProfileId;
+    delete next.renderProfile;
+  }
   await atomicWriteJson(statePath, next);
   return next;
 }
@@ -127,17 +152,26 @@ export async function updateDesktopIntegrationState(
 export async function ensureDesktopIntegrationState(
   projectOutputPath?: string,
   statePath: string = desktopIntegrationStatePath(),
-  initialDatabasePath: string = defaultDatabasePath(),
+  initialWorkspacePath: string = defaultWorkspacePath(),
 ): Promise<DesktopIntegrationState> {
   await mkdir(path.dirname(statePath), { recursive: true });
   const state = await readDesktopIntegrationState(statePath) ?? {};
+  const legacyDatabasePath = nonEmptyString(state.legacyDatabasePath) ?? databasePathFromIntegrationState(state);
 
-  const databasePath = databasePathFromIntegrationState(state) ?? initialDatabasePath;
+  const installationId = installationIdFromIntegrationState(state) ?? randomUUID();
+  const workspacePath = workspacePathFromIntegrationState(state) ?? initialWorkspacePath;
+  let workspace;
   try {
-    await stat(databasePath);
-  } catch {
-    await mkdir(path.dirname(databasePath), { recursive: true });
-    await atomicWriteJson(databasePath, { schema_version: 2, entries: [] });
+    workspace = await joinWorkspace(workspacePath, installationId);
+  } catch (error) {
+    const manifestPath = path.join(workspacePath, MANIFEST_FILENAME);
+    try {
+      await readFile(manifestPath);
+      throw error;
+    } catch (manifestError) {
+      if (manifestError === error) throw error;
+      workspace = await createWorkspace(workspacePath, installationId, DEFAULT_WORKSPACE_PROFILE);
+    }
   }
 
   const existingOutput = outputPathFromIntegrationState(state);
@@ -145,13 +179,25 @@ export async function ensureDesktopIntegrationState(
     ?? (projectOutputPath ? "project" : "database");
   const outputPath = outputMode === "project" && projectOutputPath
     ? projectOutputPath
-    : existingOutput ?? projectOutputPath ?? databasePath.replace(/\.json$/i, ".tex");
+    : outputMode === "database"
+      ? path.join(workspacePath, "entries.tex")
+      : existingOutput ?? projectOutputPath ?? path.join(workspacePath, "entries.tex");
 
-  return updateDesktopIntegrationState({ ...state, databasePath, outputPath, outputMode }, statePath);
+  const next = {
+    ...state,
+    workspacePath,
+    fragmentPath: workspace.localFragmentPath,
+    installationId,
+    outputPath,
+    outputMode,
+    ...(legacyDatabasePath ? { legacyDatabasePath } : {}),
+  };
+  delete next.databasePath;
+  return updateDesktopIntegrationState(next, statePath);
 }
 
-export async function readDesktopDatabasePath(): Promise<string | undefined> {
-  return databasePathFromIntegrationState(await readDesktopIntegrationState());
+export async function readDesktopWorkspacePath(): Promise<string | undefined> {
+  return workspacePathFromIntegrationState(await readDesktopIntegrationState());
 }
 
 export async function readDesktopOutputPath(): Promise<string | undefined> {

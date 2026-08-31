@@ -4,22 +4,42 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
-from hashlib import sha256
 from importlib.resources import files
 import json
 from pathlib import Path
 import threading
 from typing import Any, Callable
+from uuid import uuid4
 
 from .bib_migration import build_key_migration, migrate_tex_files
 from .i18n import DEFAULT_LANGUAGE, normalize_language
 from .importing import parse_acronym_package, read_tex_file
-from .model import CommandEntry, acronym_to_entry, command_map, comparison_matches, validate_entry
-from .profiles import load_profiles, normalise_profile, save_profiles
+from .model import CommandEntry, acronym_to_entry, command_map, validate_entry
+from .profiles import load_profiles, normalise_profile
 from .reference_audit import audit_project, discover_reference_files
 from .rendering import render
-from .storage import atomic_write_text, load_database, save_database
-from .vscode_integration import read_shared_state, shared_state_path, write_vscode_integration_state
+from .storage import load_database
+from .vscode_integration import (
+    clear_legacy_database_path,
+    ensure_installation_id,
+    read_shared_state,
+    shared_state_path,
+    write_vscode_integration_state,
+)
+from .workspace import (
+    MANIFEST_FILENAME,
+    WorkspaceConflictError,
+    WorkspaceError,
+    WorkspaceSnapshot,
+    create_workspace,
+    join_workspace,
+    load_workspace,
+    preview_local_entries,
+    rename_participant,
+    save_local_entries,
+    save_workspace_profile,
+    write_output_if_changed,
+)
 
 
 APP_NAME = "TAcroMan"
@@ -34,8 +54,8 @@ class DatabaseConflictError(ValueError):
     """Raised when another frontend changed the database before a mutation."""
 
 
-def _default_database_path() -> Path:
-    return Path.home() / APP_NAME / "entries.json"
+def _default_workspace_path() -> Path:
+    return Path.home() / APP_NAME / "workspace"
 
 
 def _resolved_path(value: object) -> Path | None:
@@ -53,10 +73,6 @@ def _file_signature(path: Path) -> tuple[int, int] | None:
         return stat.st_mtime_ns, stat.st_size
     except OSError:
         return None
-
-
-def _database_revision(path: Path) -> str:
-    return sha256(path.read_bytes()).hexdigest()
 
 
 def _editor_profile(profile: dict[str, object]) -> dict[str, object]:
@@ -121,16 +137,18 @@ class WebAppController:
 
     def __init__(
         self,
-        database_path: Path | None = None,
+        workspace_path: Path | None = None,
         output_path: Path | None = None,
         profiles_path: Path | None = None,
         *,
+        database_path: Path | None = None,
         state_path: Path | None = None,
         emit: MessageEmitter | None = None,
         choose_database: PathChooser | None = None,
         choose_output: PathChooser | None = None,
         choose_new_database: PathChooser | None = None,
         choose_import_tex: PathChooser | None = None,
+        choose_import_database: PathChooser | None = None,
         choose_profiles: PathChooser | None = None,
         choose_tool_paths: ToolPathChooser | None = None,
         close_app: CloseCallback | None = None,
@@ -141,91 +159,143 @@ class WebAppController:
         self.choose_output = choose_output
         self.choose_new_database = choose_new_database
         self.choose_import_tex = choose_import_tex
+        self.choose_import_database = choose_import_database
         self.choose_profiles = choose_profiles
         self.choose_tool_paths = choose_tool_paths
         self.close_app = close_app
         self._lock = threading.RLock()
+        self._pending_database_import: tuple[str, Path, list[CommandEntry], str] | None = None
 
         state = read_shared_state(self.state_path)
-        stored_database = _resolved_path(state.get("databasePath"))
-        self.database_path = (database_path or stored_database or _default_database_path()).expanduser().resolve()
-        if not self.database_path.exists():
-            save_database(self.database_path, [])
+        self.installation_id = ensure_installation_id(self.state_path)
+        stored_workspace = _resolved_path(state.get("workspacePath"))
+        self.legacy_database_path = (
+            database_path
+            or _resolved_path(state.get("legacyDatabasePath"))
+            or _resolved_path(state.get("databasePath"))
+        )
+        self.workspace_path = (workspace_path or stored_workspace or _default_workspace_path()).expanduser().resolve()
+        default_profiles_path = profiles_path or self.workspace_path / PROFILE_FILENAME
+        profile_library = load_profiles(default_profiles_path, language=normalize_language(str(state.get("language") or DEFAULT_LANGUAGE)))
+        if (self.workspace_path / MANIFEST_FILENAME).is_file():
+            self._workspace = join_workspace(self.workspace_path, self.installation_id)
+        else:
+            self._workspace = create_workspace(self.workspace_path, self.installation_id, profile_library[0])
 
-        shared_matches_database = stored_database == self.database_path
-        stored_output = _resolved_path(state.get("outputPath")) if shared_matches_database else None
-        self.output_path = (output_path or stored_output or self.database_path.with_suffix(".tex")).expanduser().resolve()
+        stored_output = _resolved_path(state.get("outputPath"))
+        self.output_path = (output_path or stored_output or self.workspace_path / "entries.tex").expanduser().resolve()
         stored_mode = str(state.get("outputMode", ""))
         self.output_mode = (
-            stored_mode
-            if shared_matches_database and stored_mode in {"project", "database", "custom"}
-            else ("custom" if output_path is not None else "database")
+            "custom"
+            if output_path is not None
+            else (stored_mode if stored_mode in {"project", "database", "custom"} else "database")
         )
-        stored_profiles = _resolved_path(state.get("profilesPath")) if shared_matches_database else None
-        self.profiles_path = (
-            profiles_path or stored_profiles or self.database_path.parent / PROFILE_FILENAME
-        ).expanduser().resolve()
+        if self.output_mode == "database" and output_path is None:
+            self.output_path = self.workspace_path / "entries.tex"
         self.language = normalize_language(str(state.get("language") or DEFAULT_LANGUAGE))
-        self.selected_profile_id = str(state.get("selectedProfileId") or "acronym-package")
-        self.profiles: list[dict[str, object]] = []
-        self._load_profiles()
-        self._known_database_revision = _database_revision(self.database_path)
-        self._write_output(self._entries())
+        self.profiles_path = default_profiles_path.expanduser().resolve()
+        self.profiles = load_profiles(self.profiles_path, language=self.language)
+        manifest_profile_id = str(self._workspace.profile.get("id") or "workspace-profile")
+        self.profiles = [
+            self._workspace.profile,
+            *(item for item in self.profiles if str(item.get("id")) != manifest_profile_id),
+        ]
+        self.selected_profile_id = manifest_profile_id
+        self._known_workspace_revision = self._workspace.revision
+        self._write_output(self._workspace)
         self._publish_state()
 
     @property
     def active_profile(self) -> dict[str, object]:
-        return next(
-            (profile for profile in self.profiles if str(profile["id"]) == self.selected_profile_id),
-            self.profiles[0],
-        )
+        return self._workspace.profile
 
     def _load_profiles(self) -> None:
-        self.profiles = load_profiles(self.profiles_path, language=self.language)
-        if not self.profiles:
-            raise ValueError("No usable TAcroMan profiles were found.")
-        profile_ids = {str(profile["id"]) for profile in self.profiles}
-        if self.selected_profile_id not in profile_ids:
-            self.selected_profile_id = str(self.profiles[0]["id"])
+        library = load_profiles(self.profiles_path, language=self.language)
+        active_id = str(self._workspace.profile.get("id") or "workspace-profile")
+        self.profiles = [self._workspace.profile, *(item for item in library if str(item.get("id")) != active_id)]
+        self.selected_profile_id = active_id
 
     def _publish_state(self) -> None:
         write_vscode_integration_state(
-            self.database_path,
+            self.workspace_path,
             self.output_path,
+            fragment_path=self._workspace.local_fragment_path,
+            installation_id=self.installation_id,
+            legacy_database_path=self.legacy_database_path,
             output_mode=self.output_mode,
-            profiles_path=self.profiles_path,
-            selected_profile_id=self.selected_profile_id,
             language=self.language,
-            render_profile=self.active_profile,
             state_path=self.state_path,
         )
         self._known_state_signature = _file_signature(self.state_path)
 
     def _entries(self) -> list[CommandEntry]:
-        return load_database(self.database_path, language=self.language)
+        return self._workspace.entries
 
-    def _write_output(self, entries: list[CommandEntry]) -> None:
-        atomic_write_text(self.output_path, render(entries, self.active_profile))
+    def _write_output(self, workspace: WorkspaceSnapshot | None = None) -> bool:
+        current = workspace or self._workspace
+        if current.export_blocked:
+            return False
+        return write_output_if_changed(self.output_path, render(current.entries, current.profile))
+
+    def _refresh_workspace(self) -> WorkspaceSnapshot:
+        self._workspace = load_workspace(self.workspace_path, self.installation_id)
+        self._known_workspace_revision = self._workspace.revision
+        self._load_profiles()
+        return self._workspace
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
-            entries = self._entries()
-            revision = _database_revision(self.database_path)
-            self._known_database_revision = revision
+            current = self._refresh_workspace()
+            local_uids = {entry.uid for entry in current.local_entries}
             return {
                 "hostKind": "desktop",
-                "databasePath": str(self.database_path),
+                "workspacePath": str(self.workspace_path),
+                "fragmentPath": str(current.local_fragment_path),
                 "outputPath": str(self.output_path),
-                "profilesPath": str(self.profiles_path),
                 "language": self.language,
-                "revision": revision,
+                "revision": current.revision,
+                "exportBlocked": current.export_blocked,
+                "owner": current.local_owner.to_dict(),
+                "fragmentCount": current.fragment_count,
+                "legacyDatabasePath": str(self.legacy_database_path) if self.legacy_database_path else None,
                 "entries": [
                     {
-                        "uid": entry.uid,
-                        "commandId": entry.command_id,
-                        "values": dict(entry.values),
+                        "uid": item.entry.uid,
+                        "localUid": item.local_uid,
+                        "commandId": item.entry.command_id,
+                        "values": dict(item.entry.values),
+                        "editable": item.local_uid is not None,
+                        "sources": [
+                            {
+                                "owner": source.owner.display_name,
+                                "installationId": source.owner.installation_id,
+                                "fragment": source.fragment_path.name,
+                                "uid": source.entry.uid,
+                            }
+                            for source in item.sources
+                        ],
                     }
-                    for entry in entries
+                    for item in current.merged_entries
+                ],
+                "conflicts": [
+                    {
+                        "id": conflict.conflict_id,
+                        "label": conflict.label,
+                        "localUids": list(conflict.local_uids),
+                        "variants": [
+                            {
+                                "uid": source.entry.uid,
+                                "commandId": source.entry.command_id,
+                                "values": dict(source.entry.values),
+                                "owner": source.owner.display_name,
+                                "installationId": source.owner.installation_id,
+                                "fragment": source.fragment_path.name,
+                                "editable": source.owner.installation_id == self.installation_id,
+                            }
+                            for source in conflict.variants
+                        ],
+                    }
+                    for conflict in current.conflicts
                 ],
                 "profile": _editor_profile(self.active_profile),
                 "profiles": [
@@ -241,9 +311,10 @@ class WebAppController:
         self.emit({"type": "error", "message": str(error)})
 
     def _ensure_revision(self, expected: object) -> None:
-        if not isinstance(expected, str) or _database_revision(self.database_path) != expected:
+        current = load_workspace(self.workspace_path, self.installation_id)
+        if not isinstance(expected, str) or current.revision != expected:
             raise DatabaseConflictError(
-                "The database changed outside this editor. Reload it before saving again."
+                "The workspace changed outside this editor. Reload it before saving again."
             )
 
     def _save_entry(self, message: dict[str, object]) -> None:
@@ -258,7 +329,8 @@ class WebAppController:
             raise ValueError("The entry request is invalid.")
 
         self._ensure_revision(message.get("revision"))
-        entries = self._entries()
+        current = self._refresh_workspace()
+        entries = list(current.local_entries)
         raw_uid = raw_entry.get("uid")
         candidate = CommandEntry(
             command_id=command_id,
@@ -270,15 +342,6 @@ class WebAppController:
         if command is None:
             raise ValueError(f"Unknown command type: {command_id}")
         errors, _warnings = validate_entry(candidate, command, language=self.language)
-        duplicates, _cross_command = comparison_matches(
-            candidate,
-            command,
-            entries,
-            commands,
-            ignore_uid=candidate.uid,
-        )
-        if duplicates:
-            errors.append("An entry with the same key already exists for this command type.")
         if errors:
             raise ValueError("\n".join(dict.fromkeys(errors)))
 
@@ -287,9 +350,13 @@ class WebAppController:
             entries.append(candidate)
         else:
             entries[index] = candidate
-        save_database(self.database_path, entries)
-        self._known_database_revision = _database_revision(self.database_path)
-        self._write_output(entries)
+        _merged, proposed_conflicts = preview_local_entries(current, entries)
+        existing_conflicts = {conflict.conflict_id for conflict in current.conflicts}
+        if any(conflict.conflict_id not in existing_conflicts for conflict in proposed_conflicts):
+            raise ValueError("This change would create a new workspace conflict.")
+        self._workspace = save_local_entries(self.workspace_path, self.installation_id, current.revision, entries)
+        self._known_workspace_revision = self._workspace.revision
+        self._write_output(self._workspace)
         self._publish_state()
 
     def _delete_entry(self, message: dict[str, object]) -> None:
@@ -297,29 +364,30 @@ class WebAppController:
         if not isinstance(uid, str) or not uid:
             raise ValueError("The delete request is invalid.")
         self._ensure_revision(message.get("revision"))
-        entries = self._entries()
+        current = self._refresh_workspace()
+        entries = list(current.local_entries)
         remaining = [entry for entry in entries if entry.uid != uid]
         if len(entries) == len(remaining):
             raise ValueError("The selected entry no longer exists.")
-        save_database(self.database_path, remaining)
-        self._known_database_revision = _database_revision(self.database_path)
-        self._write_output(remaining)
+        self._workspace = save_local_entries(self.workspace_path, self.installation_id, current.revision, remaining)
+        self._known_workspace_revision = self._workspace.revision
+        self._write_output(self._workspace)
         self._publish_state()
 
     def _select_database(self) -> None:
         if self.choose_database is None:
             return
-        selected = self.choose_database(self.database_path)
+        selected = self.choose_database(self.workspace_path)
         if selected is None:
             return
-        self.database_path = selected.expanduser().resolve()
-        if not self.database_path.exists():
-            save_database(self.database_path, [])
+        self.workspace_path = selected.expanduser().resolve()
+        self._workspace = join_workspace(self.workspace_path, self.installation_id)
         if self.output_mode == "database":
-            self.output_path = self.database_path.with_suffix(".tex")
-        self.profiles_path = self.database_path.parent / PROFILE_FILENAME
+            self.output_path = self.workspace_path / "entries.tex"
+        self.profiles_path = self.workspace_path / PROFILE_FILENAME
         self._load_profiles()
-        self._known_database_revision = _database_revision(self.database_path)
+        self._known_workspace_revision = self._workspace.revision
+        self._write_output(self._workspace)
         self._publish_state()
 
     def _select_output(self) -> None:
@@ -330,24 +398,25 @@ class WebAppController:
             return
         self.output_path = selected.expanduser().resolve()
         self.output_mode = "custom"
-        self._write_output(self._entries())
+        self._write_output(self._workspace)
         self._publish_state()
 
     def _new_database(self) -> None:
         if self.choose_new_database is None:
             return
-        selected = self.choose_new_database(self.database_path)
+        selected = self.choose_new_database(self.workspace_path)
         if selected is None:
             return
-        self.database_path = selected.expanduser().resolve()
-        self.output_path = self.database_path.with_suffix(".tex")
-        self.output_mode = "database"
-        self.profiles_path = self.database_path.parent / PROFILE_FILENAME
-        self.selected_profile_id = "acronym-package"
+        selected = selected.expanduser().resolve()
+        profile = self.active_profile
+        self.workspace_path = selected
+        self._workspace = create_workspace(self.workspace_path, self.installation_id, profile)
+        if self.output_mode == "database":
+            self.output_path = self.workspace_path / "entries.tex"
+        self.profiles_path = self.workspace_path / PROFILE_FILENAME
         self._load_profiles()
-        save_database(self.database_path, [])
-        self._known_database_revision = _database_revision(self.database_path)
-        self._write_output([])
+        self._known_workspace_revision = self._workspace.revision
+        self._write_output(self._workspace)
         self._publish_state()
 
     def _import_tex(self, message: dict[str, object]) -> None:
@@ -356,7 +425,7 @@ class WebAppController:
         self._ensure_revision(message.get("revision"))
         if "acronym" not in command_map(self.active_profile):
             raise ValueError("The active profile does not support acronym-package imports.")
-        selected = self.choose_import_tex(self.database_path)
+        selected = self.choose_import_tex(self.workspace_path)
         if selected is None:
             return
         imported = [acronym_to_entry(item) for item in parse_acronym_package(read_tex_file(selected))]
@@ -372,7 +441,8 @@ class WebAppController:
         mode = message.get("mode")
         if mode not in {"merge", "replace"}:
             raise ValueError("The import mode must be merge or replace.")
-        entries = self._entries()
+        current = self._refresh_workspace()
+        entries = list(current.local_entries)
         if mode == "replace":
             entries = unique_imports
         else:
@@ -382,26 +452,79 @@ class WebAppController:
                 if entry.command_id == "acronym"
             }
             entries.extend(entry for entry in unique_imports if entry.value("short").casefold() not in existing)
-        save_database(self.database_path, entries)
-        self._known_database_revision = _database_revision(self.database_path)
-        self._write_output(entries)
+        self._workspace = save_local_entries(self.workspace_path, self.installation_id, current.revision, entries)
+        self._known_workspace_revision = self._workspace.revision
+        self._write_output(self._workspace)
         self._publish_state()
 
-    def _select_profiles(self) -> None:
+    def _import_database(self, message: dict[str, object]) -> None:
+        if self.choose_import_database is None:
+            raise ValueError("Native database selection is unavailable in this host.")
+        self._ensure_revision(message.get("revision"))
+        selected = self.choose_import_database(self.legacy_database_path or self.workspace_path)
+        if selected is None:
+            return
+        selected = selected.expanduser().resolve()
+        imported = load_database(selected)
+        by_uid = {entry.uid: entry for entry in self._workspace.local_entries}
+        for entry in imported:
+            by_uid[entry.uid] = entry
+        proposed = list(by_uid.values())
+        merged, conflicts = preview_local_entries(self._workspace, proposed)
+        current_duplicate_count = sum(max(0, len(item.sources) - 1) for item in self._workspace.merged_entries)
+        proposed_duplicate_count = sum(max(0, len(item.sources) - 1) for item in merged)
+        token = str(uuid4())
+        self._pending_database_import = (token, selected, proposed, self._workspace.revision)
+        self.emit({
+            "type": "importPreview",
+            "token": token,
+            "path": str(selected),
+            "importedCount": len(imported),
+            "identicalDuplicates": max(0, proposed_duplicate_count - current_duplicate_count),
+            "conflicts": [conflict.label for conflict in conflicts],
+            "revision": self._workspace.revision,
+        })
+
+    def _commit_database_import(self, message: dict[str, object]) -> None:
+        pending = self._pending_database_import
+        token = message.get("token")
+        if pending is None or not isinstance(token, str) or token != pending[0]:
+            raise ValueError("The database import preview is no longer available.")
+        _token, _selected, entries, revision = pending
+        self._ensure_revision(message.get("revision"))
+        if message.get("revision") != revision:
+            raise DatabaseConflictError("The workspace changed after the import preview. Preview it again.")
+        self._workspace = save_local_entries(
+            self.workspace_path,
+            self.installation_id,
+            revision,
+            entries,
+        )
+        self._pending_database_import = None
+        self.legacy_database_path = None
+        clear_legacy_database_path(self.state_path)
+        self._known_workspace_revision = self._workspace.revision
+        self._write_output(self._workspace)
+        self._publish_state()
+
+    def _select_profiles(self, message: dict[str, object]) -> None:
         if self.choose_profiles is None:
             return
+        self._ensure_revision(message.get("revision"))
         selected = self.choose_profiles(self.profiles_path)
         if selected is None:
             return
-        previous = self.profiles_path
-        self.profiles_path = selected.expanduser().resolve()
-        try:
-            self._load_profiles()
-        except (OSError, ValueError):
-            self.profiles_path = previous
-            self._load_profiles()
-            raise
-        self._write_output(self._entries())
+        selected_profiles = load_profiles(selected.expanduser().resolve(), language=self.language)
+        chosen = next(
+            (item for item in selected_profiles if str(item.get("id")) == self.selected_profile_id),
+            selected_profiles[0],
+        )
+        self._workspace = save_workspace_profile(
+            self.workspace_path, self.installation_id, self._workspace.revision, chosen
+        )
+        self._known_workspace_revision = self._workspace.revision
+        self._load_profiles()
+        self._write_output(self._workspace)
         self._publish_state()
 
     def _set_language(self, message: dict[str, object]) -> None:
@@ -410,7 +533,6 @@ class WebAppController:
             raise ValueError("The selected language is not supported.")
         self.language = language
         self._load_profiles()
-        self._write_output(self._entries())
         self._publish_state()
 
     def _open_profile_editor(self) -> None:
@@ -424,6 +546,7 @@ class WebAppController:
         )
 
     def _save_profile(self, message: dict[str, object]) -> None:
+        self._ensure_revision(message.get("revision"))
         raw_profile = message.get("profile")
         if not isinstance(raw_profile, dict):
             raise ValueError("The profile editor did not provide a valid profile.")
@@ -447,10 +570,12 @@ class WebAppController:
             if not replaced:
                 raise ValueError("The profile being edited no longer exists.")
             self.profiles = updated
-        save_profiles(self.profiles_path, self.profiles, language=self.language)
-        self.selected_profile_id = profile_id
+        self._workspace = save_workspace_profile(
+            self.workspace_path, self.installation_id, self._workspace.revision, profile
+        )
+        self._known_workspace_revision = self._workspace.revision
         self._load_profiles()
-        self._write_output(self._entries())
+        self._write_output(self._workspace)
         self._publish_state()
         self._open_profile_editor()
         self._send_snapshot("selection")
@@ -462,7 +587,7 @@ class WebAppController:
             raise ValueError("The requested file selection is not supported.")
         if self.choose_tool_paths is None:
             raise ValueError("Native file selection is unavailable in this host.")
-        paths = self.choose_tool_paths(target, self.database_path.parent)
+        paths = self.choose_tool_paths(target, self.workspace_path)
         if target == "texFolder" and paths:
             paths = sorted(paths[0].rglob("*.tex"))
         clean = [path.expanduser().resolve() for path in paths]
@@ -572,13 +697,33 @@ class WebAppController:
         )
 
     def _select_profile(self, message: dict[str, object]) -> None:
+        self._ensure_revision(message.get("revision"))
         profile_id = message.get("profileId")
         if not isinstance(profile_id, str) or profile_id not in {
             str(profile["id"]) for profile in self.profiles
         }:
             raise ValueError("The selected profile is not available.")
-        self.selected_profile_id = profile_id
-        self._write_output(self._entries())
+        selected = next(profile for profile in self.profiles if str(profile["id"]) == profile_id)
+        self._workspace = save_workspace_profile(
+            self.workspace_path, self.installation_id, self._workspace.revision, selected
+        )
+        self._known_workspace_revision = self._workspace.revision
+        self._load_profiles()
+        self._write_output(self._workspace)
+        self._publish_state()
+
+    def _rename_participant(self, message: dict[str, object]) -> None:
+        name = str(message.get("displayName") or "").strip()
+        if not name:
+            raise ValueError("Enter a participant name.")
+        self._ensure_revision(message.get("revision"))
+        self._workspace = rename_participant(
+            self.workspace_path,
+            self.installation_id,
+            self._workspace.revision,
+            name,
+        )
+        self._known_workspace_revision = self._workspace.revision
         self._publish_state()
 
     def handle_message(self, raw: str | dict[str, object]) -> None:
@@ -615,13 +760,27 @@ class WebAppController:
                     self._import_tex(message)
                     self._send_snapshot("mutation")
                     return
+                if message_type == "importDatabase":
+                    self._import_database(message)
+                    return
+                if message_type == "commitDatabaseImport":
+                    self._commit_database_import(message)
+                    self._send_snapshot("mutation")
+                    return
+                if message_type == "dismissLegacySetup":
+                    self.legacy_database_path = None
+                    clear_legacy_database_path(self.state_path)
+                    self._publish_state()
+                    return
                 if message_type == "writeOutput":
-                    self._write_output(self._entries())
+                    if not self._write_output(self._workspace):
+                        if self._workspace.export_blocked:
+                            raise ValueError("Resolve the workspace conflicts before generating output.")
                     self._publish_state()
                     self._send_snapshot("mutation")
                     return
                 if message_type == "selectProfiles":
-                    self._select_profiles()
+                    self._select_profiles(message)
                     self._send_snapshot("selection")
                     return
                 if message_type == "setLanguage":
@@ -657,29 +816,31 @@ class WebAppController:
                     self._select_profile(message)
                     self._send_snapshot("selection")
                     return
+                if message_type == "renameParticipant":
+                    self._rename_participant(message)
+                    self._send_snapshot("selection")
+                    return
                 if message_type == "openDesktop":
                     return
                 raise ValueError("The TAcroMan desktop host received an unknown request.")
-            except DatabaseConflictError as error:
+            except (DatabaseConflictError, WorkspaceConflictError) as error:
                 self._send_error(error)
                 self._send_snapshot("external")
             except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError) as error:
                 self._send_error(error)
 
     def poll_once(self) -> bool:
-        """Publish an external snapshot when shared state or database content changed."""
+        """Publish an external snapshot when shared state or workspace content changed."""
         with self._lock:
             changed = False
             state_signature = _file_signature(self.state_path)
             if state_signature != self._known_state_signature:
                 state = read_shared_state(self.state_path)
-                database = _resolved_path(state.get("databasePath"))
+                workspace = _resolved_path(state.get("workspacePath"))
                 output = _resolved_path(state.get("outputPath"))
-                profiles = _resolved_path(state.get("profilesPath"))
-                if database and database != self.database_path:
-                    self.database_path = database
-                    if not self.database_path.exists():
-                        save_database(self.database_path, [])
+                if workspace and workspace != self.workspace_path:
+                    self.workspace_path = workspace
+                    self._workspace = join_workspace(self.workspace_path, self.installation_id)
                     changed = True
                 if output and output != self.output_path:
                     self.output_path = output
@@ -688,23 +849,19 @@ class WebAppController:
                 if output_mode in {"project", "database", "custom"} and output_mode != self.output_mode:
                     self.output_mode = str(output_mode)
                     changed = True
-                if profiles and profiles != self.profiles_path:
-                    self.profiles_path = profiles
-                    changed = True
                 language = normalize_language(str(state.get("language") or self.language))
                 if language != self.language:
                     self.language = language
                     changed = True
-                profile_id = state.get("selectedProfileId")
-                if isinstance(profile_id, str) and profile_id != self.selected_profile_id:
-                    self.selected_profile_id = profile_id
-                    changed = True
                 self._load_profiles()
                 self._known_state_signature = state_signature
 
-            revision = _database_revision(self.database_path)
-            if revision != self._known_database_revision:
-                self._known_database_revision = revision
+            current = load_workspace(self.workspace_path, self.installation_id)
+            if current.revision != self._known_workspace_revision:
+                self._workspace = current
+                self._known_workspace_revision = current.revision
+                self._load_profiles()
+                self._write_output(current)
                 changed = True
             if changed:
                 self._send_snapshot("external")
@@ -720,12 +877,14 @@ class DesktopWebApi:
         # of API discovery and causes recursion errors under debugpy.
         self._window: Any | None = None
         self._stopped = threading.Event()
+        self._last_watch_error = ""
         self._controller = controller_factory(
             emit=self._emit,
             choose_database=self._choose_database,
             choose_output=self._choose_output,
             choose_new_database=self._choose_new_database,
             choose_import_tex=self._choose_import_tex,
+            choose_import_database=self._choose_import_database,
             choose_profiles=self._choose_profiles,
             choose_tool_paths=self._choose_tool_paths,
             close_app=self._close_app,
@@ -750,10 +909,9 @@ class DesktopWebApi:
         import webview
 
         selected = self._window.create_file_dialog(
-            webview.FileDialog.OPEN,
-            directory=str(current.parent),
+            webview.FileDialog.FOLDER,
+            directory=str(current),
             allow_multiple=False,
-            file_types=("TAcroMan database (*.json)", "All files (*.*)"),
         )
         return Path(selected[0]) if selected else None
 
@@ -776,10 +934,9 @@ class DesktopWebApi:
         import webview
 
         selected = self._window.create_file_dialog(
-            webview.FileDialog.SAVE,
-            directory=str(current.parent),
-            save_filename="entries.json",
-            file_types=("TAcroMan database (*.json)", "All files (*.*)"),
+            webview.FileDialog.FOLDER,
+            directory=str(current.parent if current.exists() else current.parent),
+            allow_multiple=False,
         )
         return Path(selected[0]) if selected else None
 
@@ -793,6 +950,20 @@ class DesktopWebApi:
             directory=str(current.parent),
             allow_multiple=False,
             file_types=("TeX file (*.tex)", "All files (*.*)"),
+        )
+        return Path(selected[0]) if selected else None
+
+    def _choose_import_database(self, current: Path) -> Path | None:
+        if self._window is None:
+            return None
+        import webview
+
+        base = current.parent if current.suffix else current
+        selected = self._window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            directory=str(base),
+            allow_multiple=False,
+            file_types=("Legacy TAcroMan database (*.json)", "All files (*.*)"),
         )
         return Path(selected[0]) if selected else None
 
@@ -842,10 +1013,24 @@ class DesktopWebApi:
 
     def _watch(self) -> None:
         while not self._stopped.wait(0.75):
-            try:
-                self._controller.poll_once()
-            except (OSError, UnicodeError, ValueError, TypeError) as error:
-                self._emit({"type": "error", "message": str(error)})
+            last_error: Exception | None = None
+            for retry_delay in (0.0, 0.25, 0.5):
+                if retry_delay and self._stopped.wait(retry_delay):
+                    return
+                try:
+                    changed = self._controller.poll_once()
+                    if self._last_watch_error and not changed:
+                        self._controller._send_snapshot("external")
+                    self._last_watch_error = ""
+                    last_error = None
+                    break
+                except (OSError, UnicodeError, ValueError, TypeError) as error:
+                    last_error = error
+            if last_error is not None:
+                message = str(last_error)
+                if message != self._last_watch_error:
+                    self._emit({"type": "error", "message": message})
+                self._last_watch_error = message
 
     def _stop(self) -> None:
         self._stopped.set()
@@ -853,7 +1038,8 @@ class DesktopWebApi:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage profile-defined LaTeX command entries.")
-    parser.add_argument("--database", type=Path, help="Path to the JSON command database.")
+    parser.add_argument("--workspace", type=Path, help="Path to the TAcroMan workspace folder.")
+    parser.add_argument("--database", type=Path, help="Legacy JSON database offered for explicit import.")
     parser.add_argument("--output", type=Path, help="Path of the generated output file.")
     parser.add_argument("--profiles", type=Path, help="Optional JSON file with command-definition profiles.")
     return parser
@@ -870,6 +1056,7 @@ def main(argv: list[str] | None = None) -> None:
 
     api = DesktopWebApi(
         WebAppController,
+        workspace_path=args.workspace,
         database_path=args.database,
         output_path=args.output,
         profiles_path=args.profiles,
